@@ -41,6 +41,16 @@ class ReplyCutTest {
         assertEquals("a _b_ ", writable("a _b_ `c d "))
     }
 
+    /**
+     * `*` is checked before `_` (MARK_CHARS' order), so this only passes if an
+     * unclosed `_` found second can still overtake an unclosed `*` found first —
+     * the earliest position across mark kinds wins, not the first kind checked.
+     */
+    @Test
+    fun `an earlier unclosed mark of a different kind overtakes one already found`() {
+        assertEquals("x ", writable("x _y *z "))
+    }
+
     /** A mark can open mid-word, and half a word must never reach the page. */
     @Test
     fun `an unclosed mark inside a word holds back the whole word`() {

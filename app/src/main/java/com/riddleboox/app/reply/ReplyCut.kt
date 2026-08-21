@@ -42,23 +42,25 @@ private fun lastWordBreak(text: String): Int {
  *
  * Runs rather than characters, so `**bold**` counts as two and not four.
  */
-private fun firstUnclosedMark(text: String, limit: Int): Int? {
-    var earliest: Int? = null
-    for (mark in MARK_CHARS) {
-        val runs = ArrayList<Int>()
-        var i = 0
-        while (i < limit) {
-            if (text[i] != mark) {
-                i++
-                continue
-            }
-            runs.add(i)
-            while (i < limit && text[i] == mark) i++
+private fun firstUnclosedMark(text: String, limit: Int): Int? =
+    MARK_CHARS.asIterable().mapNotNull { mark -> unclosedRunStart(text, limit, mark) }.minOrNull()
+
+/**
+ * Position where [mark]'s last run starts within `text.take(limit)`, or null
+ * when [mark]'s runs pair off evenly there — i.e. the last one is closed.
+ *
+ * Runs rather than characters, so `**` counts as one run and not two.
+ */
+private fun unclosedRunStart(text: String, limit: Int, mark: Char): Int? {
+    val runs = ArrayList<Int>()
+    var i = 0
+    while (i < limit) {
+        if (text[i] != mark) {
+            i++
+            continue
         }
-        if (runs.size % 2 == 1) {
-            val open = runs.last()
-            if (earliest == null || open < earliest) earliest = open
-        }
+        runs.add(i)
+        while (i < limit && text[i] == mark) i++
     }
-    return earliest
+    return if (runs.size % 2 == 1) runs.last() else null
 }
