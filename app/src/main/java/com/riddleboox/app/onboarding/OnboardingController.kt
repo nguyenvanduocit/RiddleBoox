@@ -5,12 +5,14 @@ import com.riddleboox.app.handwriting.HandwritingPlanner
 import com.riddleboox.app.handwriting.ReplyRevealCursor
 import com.riddleboox.app.handwriting.WriteCursor
 import com.riddleboox.app.ink.EinkRefresher
+import com.riddleboox.app.riddle.PageRect
 import com.riddleboox.app.riddle.PageRenderState
 import com.riddleboox.app.riddle.REPLY_BOTTOM_PX
 import com.riddleboox.app.riddle.REPLY_POINTS_PER_TICK
 import com.riddleboox.app.riddle.REPLY_REFRESH_INTERVAL_MS
 import com.riddleboox.app.riddle.REPLY_TOP_PX
 import com.riddleboox.app.riddle.Ticker
+import com.riddleboox.app.riddle.union
 import com.riddleboox.app.riddle.writeBounds
 import com.riddleboox.app.ui.RegionView
 
@@ -42,6 +44,16 @@ class OnboardingController(
     private var replyCursor: ReplyRevealCursor? = null
     private var lastRefreshAtMs: Long = 0L
     private var started = false
+
+    /**
+     * Bounds newly revealed since the last flush, not yet handed to the
+     * refresher — mirrors [com.riddleboox.app.riddle.RiddleState.Replying.pendingDirtyRect].
+     * A throttled (non-flushing) tick still reveals points; without carrying
+     * their bounds forward here, the next flush would only cover that tick's
+     * own newBounds and the earlier points would never get refreshed onto the
+     * panel, making the ink lag/pop in late.
+     */
+    private var pendingDirtyRect: PageRect? = null
 
     fun start() {
         ticker.start(TICK_MS, ::tick)
@@ -83,17 +95,26 @@ class OnboardingController(
             Log.w(TAG, "onboarding segment $index tràn quá một trang — rút ngắn nội dung")
         }
         lastRefreshAtMs = 0L
+        pendingDirtyRect = null
         state = OnboardingState.Writing(index)
     }
 
     private fun tickWriting(s: OnboardingState.Writing, now: Long) {
         val cursor = replyCursor ?: return
         val newlyRevealed = cursor.revealMore(REPLY_POINTS_PER_TICK)
+        val newBounds = writeBounds(newlyRevealed)
         if (newlyRevealed.isNotEmpty()) {
-            regionView.appendReplyStrokes(newlyRevealed, writeBounds(newlyRevealed) ?: regionView.drawingRect())
+            regionView.appendReplyStrokes(newlyRevealed, newBounds ?: regionView.drawingRect())
         }
+        // Only this tick's new ink is painted, same accumulate-then-flush
+        // shape as RiddleStateMachine.tickReplying's `dirty`/`pendingDirtyRect`
+        // — a throttled tick still has to carry its bounds to the flush that
+        // actually happens next, or that ink never gets refreshed onto the
+        // panel.
+        pendingDirtyRect = union(pendingDirtyRect, newBounds)
         if (now - lastRefreshAtMs >= REPLY_REFRESH_INTERVAL_MS || (cursor.caughtUp && newlyRevealed.isNotEmpty())) {
-            refresher.requestHandwritingRefresh(regionView, regionView.drawingRect())
+            refresher.requestHandwritingRefresh(regionView, pendingDirtyRect ?: regionView.drawingRect())
+            pendingDirtyRect = null
             lastRefreshAtMs = now
         }
         state = decideOnboarding(s, now, caughtUp = cursor.caughtUp, totalSegments = segments.size).state
@@ -128,6 +149,16 @@ class OnboardingController(
 
     private companion object {
         const val TAG = "OnboardingController"
+
+        /**
+         * No [com.riddleboox.app.riddle.RiddleStateMachine.tickReplying]-style
+         * `nextTickAtMs` pacing gate here: this ticker already runs at
+         * [TICK_MS] = 16L, which is >= `REPLY_TICK_MS` (14L, from
+         * `com.riddleboox.app.riddle`) — that gate would almost never actually
+         * block a tick in practice, so leaving it out doesn't change the
+         * observed reveal speed. It just drops a field this controller has no
+         * use for over static, non-streamed content.
+         */
         const val TICK_MS = 16L
     }
 }

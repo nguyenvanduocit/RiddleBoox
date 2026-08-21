@@ -49,6 +49,7 @@ fun welcomeOverlay(context: Context, onStart: (View) -> Unit): View {
     }
     overlay = FrameLayout(context).apply {
         setBackgroundColor(Color.WHITE)
+        isClickable = true
         addView(column, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,

@@ -306,6 +306,7 @@ class MainActivity : Activity() {
                     chromeRow.visibility = View.VISIBLE
                     inkCapture.setInputEnabled(!diaryBusy)
                     stateMachine.start()
+                    onboardingController = null
                 },
             )
             root.addView(

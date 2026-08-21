@@ -106,7 +106,10 @@ class SettingsActivity : Activity() {
             addView(field("chế độ gửi", sendModeField))
             addView(field("sách trên máy", libraryField))
             // Không tự finish() ở đây — gọi lại save() để không đánh mất các
-            // field khác đang sửa dở trên cùng màn hình.
+            // field khác đang sửa dở trên cùng màn hình. save() lưu luôn mọi
+            // field khác trên màn hình này (base url, api key, model, cỡ chữ,
+            // chế độ gửi), không chỉ riêng cờ onboarding — có chủ đích, không
+            // phải side effect ngoài ý muốn.
             addView(field("giới thiệu", chooserField("chạm để xem lại") {
                 onboardingStore.write(false)
                 save()
