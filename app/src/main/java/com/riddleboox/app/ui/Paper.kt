@@ -44,7 +44,7 @@ fun Activity.openPaperWindow() {
  *
  * Black at full opacity, never faded: an alpha-faded caption reads as "quiet"
  * on a normal display, but e-ink's coarser grayscale dithers a faded black down
- * to something that isn't reliably legible at 13sp. The restraint comes from
+ * to something that isn't reliably legible at 16sp. The restraint comes from
  * the small size and the serif caps instead.
  */
 fun Context.caption(label: String): TextView = TextView(this).apply {
