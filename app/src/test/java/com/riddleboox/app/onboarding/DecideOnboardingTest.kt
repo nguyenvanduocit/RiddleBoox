@@ -68,6 +68,27 @@ class DecideOnboardingTest {
         assertTrue(decision.finished)
     }
 
+    /** [decideOnboarding] never reads `caughtUp`/`now` once the sequence is [OnboardingState.Done]. */
+    @Test
+    fun `done ignores caughtUp and never advances`() {
+        val decision = decideOnboarding(OnboardingState.Done, now = 0, caughtUp = false, totalSegments = totalSegments)
+
+        assertEquals(OnboardingState.Done, decision.state)
+        assertTrue(!decision.advance)
+        assertTrue(decision.finished)
+    }
+
+    /** A single-segment sequence has no next segment to advance to — it must finish, not wrap to `Writing(1)`. */
+    @Test
+    fun `holding past its deadline with only one segment finishes rather than advancing`() {
+        val state = OnboardingState.Holding(segmentIndex = 0, holdUntilMs = 5_000)
+        val decision = decideOnboarding(state, now = 5_000, caughtUp = true, totalSegments = 1)
+
+        assertEquals(OnboardingState.Done, decision.state)
+        assertTrue(!decision.advance)
+        assertTrue(decision.finished)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `zero segments is a programming error`() {
         decideOnboarding(OnboardingState.Writing(0), now = 0, caughtUp = true, totalSegments = 0)
