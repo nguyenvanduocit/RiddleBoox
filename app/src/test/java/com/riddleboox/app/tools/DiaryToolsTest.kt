@@ -75,6 +75,9 @@ class DiaryToolsTest {
             tools.call(name, JsonObject(arguments.associate { it.first to JsonPrimitive(it.second.toString()) }))
         }
 
+    private fun note(name: String, vararg arguments: Pair<String, Any>, tools: DiaryTools = tools()): String =
+        tools.note(name, JsonObject(arguments.associate { it.first to JsonPrimitive(it.second.toString()) }))
+
     // ---- the shelf ----
 
     @Test
@@ -391,6 +394,45 @@ class DiaryToolsTest {
         for (name in offered) {
             assertFalse("$name không được rơi vào nhánh không tồn tại", ask(name).startsWith("There is nothing called"))
         }
+    }
+
+    // ---- what the page says while a tool is still running ----
+
+    @Test
+    fun `each tool says what it is doing, quoting the book by name`() {
+        val book = "Đắc Nhân Tâm"
+        val captions = mapOf(
+            "search_library" to "Đang lần trên giá sách…",
+            "open_reader" to "Đang mở “$book”…",
+            "book_contents" to "Đang xem mục lục “$book”…",
+            "read_book" to "Đang đọc “$book”…",
+            "search_in_book" to "Đang lần trong “$book”…",
+            "read_highlights" to "Đang xem chỗ đã đánh dấu trong “$book”…",
+            "recall_diary" to "Đang lật lại những trang cũ…",
+            "delete_book" to "Đang bỏ đi “$book”…",
+            "delete_highlight" to "Đang xóa một chỗ đánh dấu…",
+            "forget_diary" to "Đang đốt một buổi tối cũ…",
+        )
+        for ((name, caption) in captions) {
+            assertEquals(name, caption, note(name, "book" to book))
+        }
+    }
+
+    /** No book named is a different sentence, not the same one with a blank in it. */
+    @Test
+    fun `read_highlights without a book is not narrowed to one`() {
+        assertEquals("Đang xem những chỗ đã đánh dấu…", note("read_highlights"))
+    }
+
+    @Test
+    fun `a named tool without a book still says what it is doing, just not to whom`() {
+        assertEquals("Đang mở sách…", note("open_reader"))
+        assertEquals("Đang bỏ đi sách…", note("delete_book"))
+    }
+
+    @Test
+    fun `a tool the model invented gets the same shrug as everything else unnamed`() {
+        assertEquals("Đang lần giở…", note("summon_basilisk"))
     }
 }
 
