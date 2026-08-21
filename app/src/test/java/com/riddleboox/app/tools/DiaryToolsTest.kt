@@ -301,6 +301,24 @@ class DiaryToolsTest {
         assertEquals(2, shelf.books().size)
     }
 
+    /**
+     * [named] would break this tie by recency and delete whichever was opened
+     * last without saying so — fine for reading, not for something with no
+     * undo. Two duplicate imports of the same title tie at the best rank.
+     */
+    @Test
+    fun `a query naming two books at the same rank deletes neither`() {
+        val original = gombrich.copy(id = "b1", lastOpenedMs = 2_000)
+        val reimport = gombrich.copy(id = "b3", lastOpenedMs = 1_000)
+        val shelf = FakeLibrary(listOf(original, reimport), marks)
+
+        val answer = ask("delete_book", "book" to "Câu Chuyện Nghệ Thuật", tools = tools(library = shelf))
+
+        assertTrue(answer.contains("names 2 books"))
+        assertTrue(answer.contains("Câu Chuyện Nghệ Thuật"))
+        assertEquals(2, shelf.books().size)
+    }
+
     @Test
     fun `a marked passage is removed by the id printed beside it`() {
         val shelf = FakeLibrary(listOf(gombrich, istio), marks)

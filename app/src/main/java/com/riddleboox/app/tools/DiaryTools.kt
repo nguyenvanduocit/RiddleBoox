@@ -7,6 +7,7 @@ import com.riddleboox.app.library.Book
 import com.riddleboox.app.library.Epub
 import com.riddleboox.app.library.Highlight
 import com.riddleboox.app.library.Library
+import com.riddleboox.app.library.bestMatches
 import com.riddleboox.app.library.matching
 import com.riddleboox.app.library.named
 import com.riddleboox.app.reply.Toolbox
@@ -421,10 +422,19 @@ class DiaryTools(
      * finishes it.
      */
     private fun deleteBook(query: String, keepFile: Boolean): String {
-        // An empty query means "any book" to [named], which is harmless when
-        // reading and a book destroyed when not.
+        // An empty query means "any book" to [named]/[bestMatches], which is
+        // harmless when reading and a book destroyed when not.
         if (query.isEmpty()) return "Name the book to remove. $SEARCH_LIBRARY says what is there."
-        val book = library.books().named(query) ?: return unknown(query)
+        val candidates = library.books().bestMatches(query)
+        if (candidates.isEmpty()) return unknown(query)
+        // Reading tolerates a guess — deleting does not. [named] would break
+        // this same tie by recency and delete the wrong one without a word.
+        if (candidates.size > 1) {
+            return "\"$query\" names ${candidates.size} books: " +
+                candidates.take(8).joinToString(", ") { "\"${it.title}\"" } +
+                ". Say more of the title to pick one."
+        }
+        val book = candidates.single()
         val file = File(book.path)
         val fileStood = book.path.isNotBlank() && file.isFile
         if (fileStood && !keepFile && !file.delete()) {

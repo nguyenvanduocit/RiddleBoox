@@ -103,6 +103,25 @@ fun List<Book>.matching(query: String): List<Book> {
 /** The one book [query] names, or null when nothing on the shelf answers to it. */
 fun List<Book>.named(query: String): Book? = matching(query).firstOrNull()
 
+/**
+ * Every book tied for [query]'s best rank — usually one, more when the shelf
+ * holds duplicates or the query is too broad to tell two books apart.
+ *
+ * [named] breaks that tie by recency, which is the right call for reading:
+ * guessing wrong costs nothing more than asking again. Deleting a book costs
+ * the book, so [deleteBook][com.riddleboox.app.tools.DiaryTools] uses this
+ * instead — a caller that needs to know a guess was made, not just get one.
+ */
+fun List<Book>.bestMatches(query: String): List<Book> {
+    val wanted = fold(query.trim())
+    if (wanted.isEmpty()) return this
+    val ranked = asSequence().mapNotNull { book -> rank(book, wanted)?.let { book to it } }.toList()
+    val bestRank = ranked.minOfOrNull { it.second } ?: return emptyList()
+    return ranked.filter { it.second == bestRank }
+        .sortedByDescending { it.first.lastOpenedMs }
+        .map { it.first }
+}
+
 /** How well [book] answers to the already-folded [wanted], lower being better. */
 private fun rank(book: Book, wanted: String): Int? {
     val title = fold(book.title)
