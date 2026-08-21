@@ -44,6 +44,7 @@ import com.riddleboox.app.riddle.RiddleStateMachine
 import com.riddleboox.app.riddle.idleStatus
 import com.riddleboox.app.onboarding.ONBOARDING_SEGMENTS
 import com.riddleboox.app.onboarding.OnboardingController
+import com.riddleboox.app.onboarding.welcomeOverlay
 import com.riddleboox.app.settings.OnboardingStore
 import com.riddleboox.app.settings.ReplyFontSizeStore
 import com.riddleboox.app.settings.ReplySettings
@@ -99,6 +100,8 @@ class MainActivity : Activity() {
     private var onboardingController: OnboardingController? = null
     /** Whether the first-run introduction has already run; gates [onResume]/[onPause]. */
     private var onboardingSeen = true
+    /** Whether the "bắt đầu" button on the welcome screen has been tapped yet. */
+    private var onboardingStarted = false
 
     private val inkCallbacks = object : InkCaptureController.Callbacks {
         override fun onPenDown(): Boolean = stateMachine.onPenDown()
@@ -304,6 +307,17 @@ class MainActivity : Activity() {
                     inkCapture.setInputEnabled(!diaryBusy)
                     stateMachine.start()
                 },
+            )
+            root.addView(
+                welcomeOverlay(this) { overlay ->
+                    root.removeView(overlay)
+                    onboardingStarted = true
+                    onboardingController?.start()
+                },
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
             )
         }
 
@@ -577,7 +591,7 @@ class MainActivity : Activity() {
         if (onboardingSeen) {
             stateMachine.start()
             resumePending()
-        } else {
+        } else if (onboardingStarted) {
             onboardingController?.start()
         }
         if (BuildConfig.DEBUG) {
@@ -593,7 +607,7 @@ class MainActivity : Activity() {
     override fun onPause() {
         if (BuildConfig.DEBUG) unregisterReceiver(demoWriteReceiver)
         penSurface.removeCallbacks(attachRetry)
-        if (onboardingSeen) stateMachine.stop() else onboardingController?.stop()
+        if (onboardingSeen) stateMachine.stop() else if (onboardingStarted) onboardingController?.stop()
         // Losing focus is temporary when Settings, Agents, or History is on
         // top. Disable input without closing the raw session so returning does
         // not recreate the TouchHelper and trigger avoidable E-Ink refreshes.
