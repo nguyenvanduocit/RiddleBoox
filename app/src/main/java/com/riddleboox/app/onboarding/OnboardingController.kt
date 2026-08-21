@@ -109,7 +109,11 @@ class OnboardingController(
         if (decision.advance) {
             regionView.clearReplyLayer()
             regionView.render(PageRenderState.EMPTY)
-            refresher.requestFullRefresh(regionView)
+            // Not requestFullRefresh: this fires once per segment (5 times
+            // across 6 segments), and the GC16 flash that clears ghosting is
+            // jarring at that cadence. Quality mode redraws the whole region
+            // clean, without the flash.
+            refresher.requestQualityPartialRefresh(regionView, regionView.drawingRect())
             beginSegment((state as OnboardingState.Writing).segmentIndex)
         }
     }
