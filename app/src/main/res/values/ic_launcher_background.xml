@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Aged paper, not stark white — the one warm note in an otherwise
+         monochrome app; BOOX launchers that force grayscale still read it
+         as a light page rather than pure white. -->
+    <color name="ic_launcher_background">#F2ECDD</color>
+</resources>

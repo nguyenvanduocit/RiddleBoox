@@ -12,10 +12,14 @@ import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.pen.data.TouchPointList
+import com.riddleboox.app.riddle.PenGate
 
 /**
  * Isolates all Onyx pen SDK usage. Falls back to plain MotionEvent input when
  * raw drawing is unavailable (emulator / non-BOOX), mirroring Inka's approach.
+ *
+ * Implements [PenGate] directly — [RiddleStateMachine][com.riddleboox.app.riddle.RiddleStateMachine]
+ * only ever gates the pen through those two methods, never drives the SDK.
  */
 class InkCaptureController(
     context: Context,
@@ -23,7 +27,7 @@ class InkCaptureController(
     private val strokeStore: StrokeStore,
     private val callbacks: Callbacks,
     private val pageRectProvider: () -> Rect,
-) {
+) : PenGate {
     interface Callbacks {
         fun onPenDown(): Boolean
         fun onPenUp()
@@ -146,7 +150,7 @@ class InkCaptureController(
      * [inputEnabled] themselves; this also tells the SDK so it stops rendering
      * ink for a pen that touches down while disabled.
      */
-    fun setInputEnabled(enabled: Boolean) {
+    override fun setInputEnabled(enabled: Boolean) {
         inputEnabled = enabled
         runCatching { touchHelper?.let { applyInputGate(it) } }
     }
@@ -170,7 +174,7 @@ class InkCaptureController(
         rawDrawingActive = false
     }
 
-    fun clearRawInkLayer() {
+    override fun clearRawInkLayer() {
         runCatching {
             restartSession(touchHelper ?: return@runCatching)
         }.onFailure { error ->

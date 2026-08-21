@@ -148,6 +148,25 @@ internal const val REPLY_RETRY_LIMIT = 3
 internal const val REPLY_RETRY_DELAY_MS = 6_000L
 
 /**
+ * Ceiling on [rateLimitRetryDelayMs] — a burst of 429s backs off past the
+ * flat [REPLY_RETRY_DELAY_MS], but must still leave room for a few attempts
+ * inside [REPLY_PATIENCE_MS] rather than spending the whole budget on one wait.
+ */
+internal const val REPLY_RATE_LIMIT_MAX_DELAY_MS = 30_000L
+
+/**
+ * Backoff for a rate-limited ([isRateLimited]) retry: doubles from
+ * [REPLY_RETRY_DELAY_MS] each attempt, capped at [REPLY_RATE_LIMIT_MAX_DELAY_MS].
+ * Retrying a throttled request at the same flat interval every other failure
+ * uses only prolongs the throttling; growing the wait gives the provider's
+ * window a chance to clear.
+ */
+internal fun rateLimitRetryDelayMs(attempt: Int): Long {
+    val shift = (attempt - 1).coerceIn(0, 6)
+    return minOf(REPLY_RETRY_DELAY_MS shl shift, REPLY_RATE_LIMIT_MAX_DELAY_MS)
+}
+
+/**
  * One stage further into the ink dissolve, or out the other side of it.
  *
  * main.rs:470-485. The writer's committed strokes and the standing reply they
@@ -257,18 +276,26 @@ fun decideThinking(
             // A request that never left the device keeps retrying until the
             // patience budget runs out — this panel's Wi-Fi drops DNS for tens
             // of seconds whenever it changes bands, which outlasts a
-            // three-attempt budget. Anything else (a bad key, a wrong model)
-            // will fail the same way forever, so it gets three.
+            // three-attempt budget. A provider-side 429 gets the same
+            // unlimited-attempts treatment (it resolves on its own, same as a
+            // Wi-Fi blip) but backs off instead of retrying at a flat interval.
+            // Anything else (a bad key, a wrong model) will fail the same way
+            // forever, so it gets three.
             val unreachable = isUnreachable(event.message)
+            val rateLimited = isRateLimited(event.message)
             val attempt = s.retryCount + 1
-            if (unreachable || s.retryCount < REPLY_RETRY_LIMIT) {
+            if (unreachable || rateLimited || s.retryCount < REPLY_RETRY_LIMIT) {
+                val delay = if (rateLimited) rateLimitRetryDelayMs(attempt) else REPLY_RETRY_DELAY_MS
                 return Decision(
-                    state = s.copy(retryCount = attempt, retryAtMs = now + REPLY_RETRY_DELAY_MS),
+                    state = s.copy(retryCount = attempt, retryAtMs = now + delay),
                     effects = listOf(
                         Effect.Note("reply retry $attempt after: ${event.message}", warning = true),
                         Effect.Status(
-                            if (unreachable) "Mất kết nối — đang thử lại (lần $attempt)…"
-                            else "Trục trặc — thử lại $attempt/$REPLY_RETRY_LIMIT…",
+                            when {
+                                rateLimited -> "Quá nhiều yêu cầu — đang chờ rồi thử lại (lần $attempt)…"
+                                unreachable -> "Mất kết nối — đang thử lại (lần $attempt)…"
+                                else -> "Trục trặc — thử lại $attempt/$REPLY_RETRY_LIMIT…"
+                            },
                         ),
                     ),
                 )

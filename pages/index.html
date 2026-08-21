@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f1efe9" />
+    <meta
+      name="description"
+      content="RiddleBoox is an AI companion for BOOX: write what feels heavy, and receive a patient reply in the same handwriting."
+    />
+    <meta property="og:title" content="RiddleBoox — a companion made of ink" />
+    <meta
+      property="og:description"
+      content="Write what is hard to say. Let your AI companion listen, remember, and answer in the same place your thought began."
+    />
+    <meta property="og:type" content="website" />
+    <title>RiddleBoox — an AI diary made of ink</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="RiddleBoox home">
+        <span class="brand-mark">R</span>
+        <span class="brand-name">Riddle<span>Boox</span></span>
+      </a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="#companion">The companion</a>
+        <a href="#inside">How it learns you</a>
+        <a href="#boox">Why handwriting</a>
+      </nav>
+      <a class="nav-cta nav-download" href="#download" data-android-download>
+        <svg class="android-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M8.4 5.7 7.3 3.9l.8-.5 1.1 1.8a6.1 6.1 0 0 1 5.6 0l1.1-1.8.8.5-1.1 1.8a5.7 5.7 0 0 1 2.1 3H6.3a5.7 5.7 0 0 1 2.1-3ZM5.2 9c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9Zm13.6 0c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9ZM7 9.1h10v6.6c0 .7-.5 1.2-1.2 1.2H8.2c-.7 0-1.2-.5-1.2-1.2V9.1Zm2.1 8.1h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Zm4.5 0h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Z" />
+          <circle cx="9.2" cy="7.1" r=".55" fill="var(--paper)" />
+          <circle cx="14.8" cy="7.1" r=".55" fill="var(--paper)" />
+        </svg>
+        Download for Android <span aria-hidden="true">↓</span>
+      </a>
+    </header>
+
+    <main id="top">
+      <section class="hero section-shell">
+        <div class="hero-copy reveal">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> An AI companion for the heavy days</p>
+          <h1>A friend who gets to know you <em>through writing.</em></h1>
+          <p class="hero-lede">
+            Write what is hard to say. RiddleBoox listens to the whole page, remembers the thread,
+            and answers with the kind of patience that lets you stay with yourself a little longer.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#companion">Meet your companion <span aria-hidden="true">↓</span></a>
+            <a class="text-link" href="#boox">Why writing matters <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="hero-note">
+            <span class="line-mark" aria-hidden="true"></span>
+            <span>A heavy feeling deserves somewhere to land.</span>
+          </div>
+        </div>
+
+        <div class="hero-stage hero-stage-image reveal reveal-delay-1" aria-label="A large BOOX page where a companion listens and writes back">
+          <div class="stage-orbit orbit-one" aria-hidden="true"></div>
+          <div class="stage-orbit orbit-two" aria-hidden="true"></div>
+          <figure class="companion-hero-figure">
+            <div class="hero-boox-demo" data-state="write" aria-label="Animated RiddleBoox page demonstration">
+              <div class="demo-chrome">
+                <span>RIDDLEBOOX / <b data-demo-turn>01</b></span>
+                <span class="demo-status" data-demo-status>listening</span>
+              </div>
+              <div class="demo-page">
+                <div class="demo-page-lines" aria-hidden="true"></div>
+                <div class="demo-dust" aria-hidden="true">
+                  <i style="--dust-x: 16%; --dust-y: 37%; --dust-dx: -28px; --dust-dy: -34px; --dust-delay: 0s"></i>
+                  <i style="--dust-x: 24%; --dust-y: 49%; --dust-dx: -18px; --dust-dy: 28px; --dust-delay: .08s"></i>
+                  <i style="--dust-x: 34%; --dust-y: 30%; --dust-dx: -8px; --dust-dy: -42px; --dust-delay: .16s"></i>
+                  <i style="--dust-x: 43%; --dust-y: 55%; --dust-dx: 4px; --dust-dy: 31px; --dust-delay: .04s"></i>
+                  <i style="--dust-x: 51%; --dust-y: 35%; --dust-dx: 13px; --dust-dy: -38px; --dust-delay: .2s"></i>
+                  <i style="--dust-x: 59%; --dust-y: 52%; --dust-dx: 27px; --dust-dy: 27px; --dust-delay: .1s"></i>
+                  <i style="--dust-x: 68%; --dust-y: 32%; --dust-dx: 36px; --dust-dy: -30px; --dust-delay: .24s"></i>
+                  <i style="--dust-x: 76%; --dust-y: 47%; --dust-dx: 22px; --dust-dy: 34px; --dust-delay: .14s"></i>
+                  <i style="--dust-x: 29%; --dust-y: 67%; --dust-dx: -32px; --dust-dy: 16px; --dust-delay: .22s"></i>
+                  <i style="--dust-x: 47%; --dust-y: 70%; --dust-dx: -4px; --dust-dy: 24px; --dust-delay: .3s"></i>
+                  <i style="--dust-x: 63%; --dust-y: 68%; --dust-dx: 31px; --dust-dy: 18px; --dust-delay: .18s"></i>
+                </div>
+                <div class="demo-copy" data-demo-copy aria-live="polite">Today, something feels heavy.</div>
+                <span class="demo-cursor" aria-hidden="true"></span>
+                <span class="demo-thinking-dot" aria-hidden="true"></span>
+              </div>
+              <div class="demo-caption" data-demo-caption>write with your pen</div>
+            </div>
+            <figcaption><span>the page becomes a place to be heard</span><span>RIDDLEBOOX / 001</span></figcaption>
+          </figure>
+          <div class="floating-note note-top"><span>someone who stays</span><strong>✦</strong></div>
+          <div class="floating-note note-bottom"><span>write / ask / remember</span><strong>↘</strong></div>
+        </div>
+      </section>
+
+      <section class="signal-row section-shell reveal" aria-label="RiddleBoox principles">
+        <div><span>01</span> Write to think</div>
+        <div><span>02</span> Remember who you are</div>
+        <div><span>03</span> Read and learn together</div>
+        <div><span>∞</span> Help when you ask</div>
+      </section>
+
+      <section class="download-prompt section-shell reveal" id="download">
+        <div class="download-mark" aria-hidden="true">
+          <span class="download-app-mark">R</span>
+          <span class="download-android-mark">
+            <svg class="android-icon" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M8.4 5.7 7.3 3.9l.8-.5 1.1 1.8a6.1 6.1 0 0 1 5.6 0l1.1-1.8.8.5-1.1 1.8a5.7 5.7 0 0 1 2.1 3H6.3a5.7 5.7 0 0 1 2.1-3ZM5.2 9c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9Zm13.6 0c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9ZM7 9.1h10v6.6c0 .7-.5 1.2-1.2 1.2H8.2c-.7 0-1.2-.5-1.2-1.2V9.1Zm2.1 8.1h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Zm4.5 0h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Z" />
+              <circle cx="9.2" cy="7.1" r=".55" fill="var(--acid)" />
+              <circle cx="14.8" cy="7.1" r=".55" fill="var(--acid)" />
+            </svg>
+          </span>
+        </div>
+        <div class="download-copy">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> Android / made for BOOX</p>
+          <h2>Bring your companion to the page.</h2>
+          <p>The native Android app is being prepared for BOOX tablets. The download link will live here as soon as the first build is ready.</p>
+        </div>
+        <div class="download-actions">
+          <a class="button button-download is-pending" href="#download" data-android-download aria-describedby="download-note">
+            <svg class="android-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor" d="M8.4 5.7 7.3 3.9l.8-.5 1.1 1.8a6.1 6.1 0 0 1 5.6 0l1.1-1.8.8.5-1.1 1.8a5.7 5.7 0 0 1 2.1 3H6.3a5.7 5.7 0 0 1 2.1-3ZM5.2 9c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9Zm13.6 0c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9ZM7 9.1h10v6.6c0 .7-.5 1.2-1.2 1.2H8.2c-.7 0-1.2-.5-1.2-1.2V9.1Zm2.1 8.1h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Zm4.5 0h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Z" />
+              <circle cx="9.2" cy="7.1" r=".55" fill="var(--acid)" />
+              <circle cx="14.8" cy="7.1" r=".55" fill="var(--acid)" />
+            </svg>
+            Download for Android <span aria-hidden="true">↓</span>
+          </a>
+          <span class="download-note" id="download-note">APK / Play link coming soon</span>
+        </div>
+      </section>
+
+      <section class="ritual section-shell" id="ritual">
+        <div class="section-intro reveal">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> The relationship</p>
+          <h2>Not another tool. Someone to tell the truth to.</h2>
+          <p>
+            RiddleBoox keeps the interface quiet so the relationship can feel human. You write as
+            yourself; your companion listens without asking you to make the feeling neat, then
+            answers in the same medium your thought began in.
+          </p>
+        </div>
+
+        <div class="ritual-grid">
+          <article class="ritual-card reveal">
+            <div class="card-number">01</div>
+            <div class="card-visual card-visual-write">
+              <div class="tiny-chrome"><span>diary</span><span>listening</span></div>
+              <div class="sample-page sample-page-write">
+                <span class="sample-script">Today, something<br />feels heavy.</span>
+                <span class="sample-note">I don't know why yet.</span>
+              </div>
+              <span class="ink-cursor" aria-hidden="true"></span>
+            </div>
+            <h3>Say it before you explain it.</h3>
+            <p>Your hand can wander, hesitate, and stop. The unedited sentence is enough for a companion to begin listening.</p>
+          </article>
+
+          <article class="ritual-card reveal reveal-delay-1">
+            <div class="card-number">02</div>
+            <div class="card-visual card-visual-think">
+              <div class="pulse-dot"></div>
+              <div class="pulse-ring ring-a"></div>
+              <div class="pulse-ring ring-b"></div>
+              <span class="thinking-label">listening / gently</span>
+            </div>
+            <h3>Let the pause hold it.</h3>
+            <p>When you lift the pen, the page makes room. The pause is not a loading screen; it is the moment your companion gathers the thread.</p>
+          </article>
+
+          <article class="ritual-card reveal reveal-delay-2">
+            <div class="card-number">03</div>
+            <div class="card-visual card-visual-reply">
+              <div class="reply-meta">a reply / just now</div>
+              <div class="reply-line reply-line-a">You don't have to explain<br />it all tonight.</div>
+              <div class="reply-line reply-line-b">I'm here. We can take it slowly.</div>
+              <span class="reply-pencil" aria-hidden="true">✦</span>
+            </div>
+            <h3>Let the kindness come back.</h3>
+            <p>The reply returns to the paper, so the exchange feels like a thought shared with someone — not a feed of messages.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="companion section-shell" id="companion">
+        <div class="section-intro reveal">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> Agent support for the life around your page</p>
+          <h2>One companion, many ways to be there.</h2>
+          <p>
+            The same patient companion can take on different roles around the feeling you bring to
+            the page. A friend to confide in, a teacher when you want to grow, a reader when a book
+            opens something up, or a helper when the next step is practical.
+          </p>
+        </div>
+        <div class="companion-grid">
+          <article class="companion-card companion-card-teacher reveal">
+            <div class="companion-symbol">↧</div>
+            <p class="companion-role">Book agent</p>
+            <h3>Find the book behind the feeling.</h3>
+            <p>When a thought sends you looking for a story, search your library, follow highlights, or ask the agent to find and download the next book.</p>
+            <span class="companion-index">01 / discover</span>
+          </article>
+          <article class="companion-card companion-card-friend reveal reveal-delay-1">
+            <div class="companion-symbol">Aa</div>
+            <p class="companion-role">English tutor</p>
+            <h3>Find the words you were trying to say.</h3>
+            <p>Write the sentence as it comes. Ask for a clearer phrase, a gentle correction, or a conversation that follows what is on your mind.</p>
+            <span class="companion-index">02 / learn</span>
+          </article>
+          <article class="companion-card companion-card-reader reveal reveal-delay-2">
+            <div class="companion-symbol">◌</div>
+            <p class="companion-role">Reflection companion</p>
+            <h3>Stay with the difficult thing.</h3>
+            <p>Use a gentle agent to name what you feel, notice patterns, and think through a next step. A space for reflection, not a replacement for professional care.</p>
+            <span class="companion-index">03 / reflect</span>
+          </article>
+          <article class="companion-card companion-card-operator reveal reveal-delay-1">
+            <div class="companion-symbol">♡</div>
+            <p class="companion-role">Sharing companion</p>
+            <h3>Have somewhere honest to put the day.</h3>
+            <p>Share what is on your mind, return to earlier pages, and keep a thread of what matters with a companion that listens before it advises.</p>
+            <span class="companion-index">04 / share</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="inside section-shell" id="inside">
+        <div class="inside-copy reveal">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> A relationship that grows</p>
+          <h2>The more honestly you write, the better company it keeps.</h2>
+          <p>
+            Writing gives an AI something a prompt never can: the texture of a person over time.
+            RiddleBoox keeps the evenings when something felt heavy close, so you can return to the
+            thread instead of having to start explaining yourself from zero.
+          </p>
+          <div class="feature-list">
+            <div class="feature-item">
+              <span class="feature-icon">↺</span>
+              <div><strong>Remember the evenings</strong><span>Return to the thoughts you left unfinished, without losing the feeling around them.</span></div>
+            </div>
+            <div class="feature-item">
+              <span class="feature-icon">✦</span>
+              <div><strong>Choose the kind of company</strong><span>Teacher, friend, reader, helper — or your own agent.</span></div>
+            </div>
+            <div class="feature-item">
+              <span class="feature-icon">⌁</span>
+              <div><strong>Stay close to your world</strong><span>Open books, search highlights, and work with BOOX notes when you ask.</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="memory-card reveal reveal-delay-1">
+          <div class="memory-header">
+            <span>memory / nearby</span>
+            <span class="memory-status">2 pages</span>
+          </div>
+          <div class="memory-page memory-page-main">
+            <span class="page-index">today / 22:41</span>
+            <div class="memory-script memory-script-main">Today feels<br />a little heavy.</div>
+            <div class="memory-note">I don't know why yet.</div>
+            <span class="memory-arrow">↳</span>
+          </div>
+          <div class="memory-page memory-page-small">
+            <span class="page-index">yesterday / 23:08</span>
+            <div class="memory-script memory-script-small">You wrote it<br />down anyway.</div>
+          </div>
+          <div class="memory-foot"><span>the page remembers the thread</span><span>⟶</span></div>
+        </div>
+      </section>
+
+      <section class="boox section-shell" id="boox">
+        <div class="boox-heading reveal">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> Made for the medium</p>
+          <h2>Writing gives a heavy thought somewhere to go.</h2>
+        </div>
+        <div class="boox-layout">
+          <div class="boox-quote reveal">
+            <div class="quote-mark">“</div>
+            <blockquote>You don't have to make sense of everything before you say it.</blockquote>
+            <div class="quote-signature">— why the page comes first</div>
+          </div>
+          <div class="boox-points reveal reveal-delay-1">
+            <div class="boox-point"><span>01</span><div><h3>The hand says it first</h3><p>Writing is slower, physical, and less performative. It lets a difficult feeling arrive before you ask anyone to answer it.</p></div></div>
+            <div class="boox-point"><span>02</span><div><h3>The pause stays gentle</h3><p>BOOX pen input and e-ink pacing keep the interface out of the way, so the companion can listen before it reaches for advice.</p></div></div>
+            <div class="boox-point"><span>03</span><div><h3>The thread stays close</h3><p>Vision, memory, books, notes, and tools meet on one page — the same place you started telling the truth.</p></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="start section-shell" id="start">
+        <div class="start-panel reveal">
+          <div class="start-copy">
+            <p class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> Start with a blank page</p>
+            <h2>Give the heavy days somewhere to land.</h2>
+            <p>Write the line you almost kept to yourself. RiddleBoox gives it a quiet page, a patient reply, and a companion to return to when you are ready.</p>
+            <div class="start-actions">
+              <a class="button button-light button-download" href="#download" data-android-download>
+                <svg class="android-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor" d="M8.4 5.7 7.3 3.9l.8-.5 1.1 1.8a6.1 6.1 0 0 1 5.6 0l1.1-1.8.8.5-1.1 1.8a5.7 5.7 0 0 1 2.1 3H6.3a5.7 5.7 0 0 1 2.1-3ZM5.2 9c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9Zm13.6 0c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9ZM7 9.1h10v6.6c0 .7-.5 1.2-1.2 1.2H8.2c-.7 0-1.2-.5-1.2-1.2V9.1Zm2.1 8.1h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Zm4.5 0h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Z" />
+                  <circle cx="9.2" cy="7.1" r=".55" fill="var(--ink)" />
+                  <circle cx="14.8" cy="7.1" r=".55" fill="var(--ink)" />
+                </svg>
+                Download for Android <span aria-hidden="true">↓</span>
+              </a>
+              <a class="light-link" href="#faq">Read the notes <span aria-hidden="true">↓</span></a>
+            </div>
+          </div>
+          <div class="start-glyph" aria-hidden="true">
+            <span class="glyph-circle"></span>
+            <span class="glyph-line glyph-line-1"></span>
+            <span class="glyph-line glyph-line-2"></span>
+            <span class="glyph-line glyph-line-3"></span>
+            <span class="glyph-star">✦</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="faq section-shell" id="faq">
+        <div class="section-intro reveal">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> The short version</p>
+          <h2>Questions you might write in the margin.</h2>
+        </div>
+        <div class="faq-list reveal reveal-delay-1">
+          <details open>
+            <summary>What is RiddleBoox, really?</summary>
+            <p>It is a native Android companion for BOOX tablets. You write to it like a diary, and it can respond, remember, teach, read with you, or help manage things when you ask.</p>
+          </details>
+          <details>
+            <summary>Why is writing better than typing here?</summary>
+            <p>Because writing is not only a way to enter words. It slows attention down, makes room for uncertainty, and shows more of how a thought is forming. That is the kind of context a companion can understand.</p>
+          </details>
+          <details>
+            <summary>Can it be more than a diary?</summary>
+            <p>Yes. Different agents can take on different roles, and the app can work with your books, highlights, BOOX notes, and workspace — including finding and downloading a book when you ask. The page stays the same; the kind of help changes with the moment.</p>
+          </details>
+          <details>
+            <summary>Is it a replacement for professional care?</summary>
+            <p>No. RiddleBoox can be a gentle space to reflect, name a feeling, and think through a next step, but it is not a therapist, crisis service, or replacement for professional mental-health care.</p>
+          </details>
+          <details>
+            <summary>What does “Riddle” mean here?</summary>
+            <p>RiddleBoox is a BOOX project inspired by Riddle’s ink-first diary idea and Inka’s native Android approach. It is its own companion, built around the belief that the page should come before the prompt.</p>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer section-shell">
+      <div class="footer-brand"><span class="brand-mark">R</span><span>RiddleBoox</span></div>
+      <p>an AI diary made of ink</p>
+      <div class="footer-right"><span>BOOX / ANDROID</span><a href="#top">Back to the top ↑</a></div>
+    </footer>
+  </body>
+</html>

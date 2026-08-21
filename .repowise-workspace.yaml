@@ -1,0 +1,31 @@
+version: 1
+default_repo: riddleboox
+repos:
+- path: .
+  alias: riddleboox
+  is_primary: true
+  indexed_at: '2026-08-21T10:05:41.056317+00:00'
+- path: references/Inka
+  alias: inka
+  indexed_at: '2026-08-21T10:05:52.628633+00:00'
+  last_commit_at_index: 18778edf262f13cf9bc86d8e5c27394dec409ffa
+- path: references/OnyxAndroidDemo
+  alias: onyxandroiddemo
+  indexed_at: '2026-08-21T10:05:59.103912+00:00'
+  last_commit_at_index: 689ff7f8c4ea971b1b436e5c967c921dc8596f3a
+- path: references/Riddle
+  alias: riddle
+  indexed_at: '2026-08-21T10:06:01.588893+00:00'
+  last_commit_at_index: 0d1a9feea75027543e2ed49c721656cd261f03a1
+- path: references/boox-rapid-draw
+  alias: boox-rapid-draw
+  indexed_at: '2026-08-21T10:06:03.150799+00:00'
+  last_commit_at_index: 8d383e793aec9946858f69ad01d6d973da06b091
+- path: references/boox-riddle-diary
+  alias: boox-riddle-diary
+  indexed_at: '2026-08-21T10:06:05.312852+00:00'
+  last_commit_at_index: c26cdcffb30682c400638ed7e37858d5bc59bbc1
+- path: references/zlib
+  alias: zlib
+  indexed_at: '2026-08-21T10:06:08.994350+00:00'
+  last_commit_at_index: 0ed452abc68e2e2172b30c9ad7e9d1b8d4a67bf3

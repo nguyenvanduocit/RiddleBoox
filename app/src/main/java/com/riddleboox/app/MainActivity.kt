@@ -20,6 +20,7 @@ import android.util.Log
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,6 +41,7 @@ import com.riddleboox.app.ink.InkStroke
 import com.riddleboox.app.ink.PageArchive
 import com.riddleboox.app.ink.StrokeStore
 import com.riddleboox.app.riddle.HandlerTicker
+import com.riddleboox.app.riddle.PendingTurnMarker
 import com.riddleboox.app.riddle.RiddleStateMachine
 import com.riddleboox.app.riddle.idleStatus
 import com.riddleboox.app.onboarding.ONBOARDING_SEGMENTS
@@ -59,6 +61,7 @@ import com.riddleboox.app.tools.DilibTools
 import com.riddleboox.app.tools.DiaryTools
 import com.riddleboox.app.tools.BooxNotesTools
 import com.riddleboox.app.tools.BooxNote
+import com.riddleboox.app.tools.MemoryTools
 import com.riddleboox.app.tools.OpenAiBooxNotesVisionReader
 import com.riddleboox.app.tools.StoredMemory
 import com.riddleboox.app.reply.Toolbox
@@ -66,11 +69,13 @@ import com.riddleboox.app.reply.reasoningFor
 import com.riddleboox.app.reply.replyClient
 import com.riddleboox.app.reply.replyModel
 import com.riddleboox.app.ui.RegionView
+import com.riddleboox.app.ui.RegionViewPanel
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.chromeTopInset
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
 import java.io.File
+import java.util.UUID
 
 /**
  * Wires the diary together: pen capture -> [RiddleStateMachine] -> page
@@ -130,6 +135,17 @@ class MainActivity : Activity() {
         // otherwise spend its own full-screen GC refresh on a new surface
         // before the page gets to schedule the one refresh it actually needs.
         refresher.configureNewSurfaces()
+
+        // Checked once, at cold start, before anything writes a new marker of
+        // its own — see PendingTurnMarker's own doc for what leaves this set.
+        val pendingTurnMarker = PendingTurnMarker(filesDir)
+        if (pendingTurnMarker.consume()) {
+            Toast.makeText(
+                this,
+                "Trang trước có thể đã bị gián đoạn khi ứng dụng đóng — nội dung chưa chắc đã được lưu.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
 
         agentStore = AgentStore(this)
         agentStore.ensureDefaults()
@@ -261,8 +277,7 @@ class MainActivity : Activity() {
         stateMachine = RiddleStateMachine(
             strokeStore = strokeStore,
             inkCapture = inkCapture,
-            regionView = regionView,
-            refresher = refresher,
+            panel = RegionViewPanel(regionView, refresher),
             ticker = HandlerTicker(),
             replySettings = replySettings,
             agent = selectedAgent,
@@ -278,6 +293,7 @@ class MainActivity : Activity() {
             } else {
                 null
             },
+            pendingTurnMarker = pendingTurnMarker,
             initialSendMode = sendMode,
             pageWidthPx = { penSurface.width },
             onStatusChanged = { statusView.text = it },
@@ -469,6 +485,10 @@ class MainActivity : Activity() {
         val boxes = buildList {
             if (AgentCapability.WORKSPACE in selectedAgent.toolIds) {
                 add(WorkspaceTools(selectedAgent.workspace))
+                // A fresh id per toolbox build, not per turn: this is rebuilt
+                // exactly when a new evening starts (app open, agent switch),
+                // the same boundary RiddleStateMachine.conversationId uses.
+                add(MemoryTools(selectedAgent.workspace, conversationId = UUID.randomUUID().toString()))
             }
             if (AgentCapability.LIBRARY in selectedAgent.toolIds) {
                 add(diaryTools())

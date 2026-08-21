@@ -1,0 +1,8 @@
+[mcp_servers.repowise]
+command = "repowise"
+args = ["mcp"]
+cwd = "/Users/firegroup/projects/RiddleBoox"
+startup_timeout_sec = 20
+
+[features]
+hooks = true

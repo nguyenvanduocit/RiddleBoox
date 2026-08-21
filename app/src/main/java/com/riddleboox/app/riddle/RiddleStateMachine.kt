@@ -2,7 +2,6 @@ package com.riddleboox.app.riddle
 
 import android.util.Log
 import com.riddleboox.app.agent.AgentDefinition
-import com.riddleboox.app.agent.AgentCapability
 import com.riddleboox.app.handwriting.HandwritingPlanner
 import com.riddleboox.app.handwriting.ReplyRevealCursor
 import com.riddleboox.app.handwriting.WriteCursor
@@ -12,8 +11,6 @@ import com.riddleboox.app.handwriting.WriteStroke
 import com.riddleboox.app.history.ConversationStore
 import com.riddleboox.app.history.StoredConversation
 import com.riddleboox.app.history.StoredTurn
-import com.riddleboox.app.ink.EinkRefresher
-import com.riddleboox.app.ink.InkCaptureController
 import com.riddleboox.app.ink.InkPoint
 import com.riddleboox.app.ink.InkStroke
 import com.riddleboox.app.ink.PageArchive
@@ -28,7 +25,7 @@ import com.riddleboox.app.reply.replyModel
 import com.riddleboox.app.reply.writableCut
 import com.riddleboox.app.settings.ReplySettings
 import com.riddleboox.app.settings.SendMode
-import com.riddleboox.app.ui.RegionView
+import com.riddleboox.app.tools.recentMemoriesText
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.CancellationException
@@ -67,9 +64,8 @@ import kotlinx.coroutines.launch
  */
 class RiddleStateMachine(
     private val strokeStore: StrokeStore,
-    private val inkCapture: InkCaptureController,
-    private val regionView: RegionView,
-    private val refresher: EinkRefresher,
+    private val inkCapture: PenGate,
+    private val panel: PagePanel,
     /** What the diary's whole sense of time comes from — see [Ticker]. */
     private val ticker: Ticker,
     /** The selected RiddleBoox agent, unrelated to Claude Code's agent model. */
@@ -87,6 +83,11 @@ class RiddleStateMachine(
     private val conversationStore: ConversationStore,
     /** Where the pages actually sent are kept for the writer to look at. */
     private val pageArchive: PageArchive?,
+    /**
+     * Crash-safety breadcrumb for a page handed to the diary — see
+     * [PendingTurnMarker]'s own doc for exactly when it is set and cleared.
+     */
+    private val pendingTurnMarker: PendingTurnMarker,
     initialSendMode: SendMode = SendMode.Auto,
     private val pageWidthPx: () -> Int,
     private val onStatusChanged: (String) -> Unit,
@@ -155,8 +156,7 @@ class RiddleStateMachine(
             reasoning = reasoningFor(it.model),
             toolbox = toolbox,
             systemPrompt = agent.systemPrompt,
-            includeLibrarySense = AgentCapability.LIBRARY in agent.toolIds,
-            includeBooxNotesSense = AgentCapability.BOOX_NOTES in agent.toolIds,
+            recentMemories = recentMemoriesText(agent.workspace),
         )
     }
     private val replyScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -350,18 +350,18 @@ class RiddleStateMachine(
 
     private fun perform(effect: Effect) {
         when (effect) {
-            is Effect.Render -> regionView.render(effect.page)
+            is Effect.Render -> panel.render(effect.page)
             is Effect.BeginReply -> beginReply(effect.startYPx)
             is Effect.WriteText -> writeText(effect.text)
             is Effect.FeedReply -> feedReply(effect.delta)
-            is Effect.AppendReplyInk -> regionView.appendReplyStrokes(effect.strokes, effect.area)
-            Effect.ClearReplyLayer -> regionView.clearReplyLayer()
+            is Effect.AppendReplyInk -> panel.appendReplyStrokes(effect.strokes, effect.area)
+            Effect.ClearReplyLayer -> panel.clearReplyLayer()
             is Effect.Refresh -> when (effect.mode) {
-                RefreshMode.Fast -> refresher.requestFastPartialRefresh(regionView, effect.area)
-                RefreshMode.Handwriting -> refresher.requestHandwritingRefresh(regionView, effect.area)
-                RefreshMode.Quality -> refresher.requestQualityPartialRefresh(regionView, effect.area)
+                RefreshMode.Fast -> panel.requestFastPartialRefresh(effect.area)
+                RefreshMode.Handwriting -> panel.requestHandwritingRefresh(effect.area)
+                RefreshMode.Quality -> panel.requestQualityPartialRefresh(effect.area)
             }
-            Effect.FullRefresh -> refresher.requestFullRefresh(regionView)
+            Effect.FullRefresh -> panel.requestFullRefresh()
             is Effect.Status -> onStatusChanged(effect.text)
             is Effect.PenInput -> inkCapture.setInputEnabled(effect.enabled)
             Effect.ClearRawInk -> inkCapture.clearRawInkLayer()
@@ -443,6 +443,7 @@ class RiddleStateMachine(
      */
     private fun cutReplyShort() {
         abandonReply()
+        pendingTurnMarker.clear()
         val cursor = replyCursor
         val plan = WritePlan(cursor?.revealed().orEmpty())
         val standing = written.seen(cursor?.revealedStrokes ?: 0).trim()
@@ -455,11 +456,11 @@ class RiddleStateMachine(
             persistTurn(transcript = "", reply = standing)
         }
         written.reset()
-        regionView.render(PageRenderState(replyStrokes = plan.strokes))
-        regionView.clearReplyLayer()
+        panel.render(PageRenderState(replyStrokes = plan.strokes))
+        panel.clearReplyLayer()
         writeCursor = null
         replyCursor = null
-        settleFinishedTurn(writeBounds(plan.strokes) ?: regionView.drawingRect())
+        settleFinishedTurn(writeBounds(plan.strokes) ?: panel.drawingRect())
         inkCapture.setInputEnabled(true)
         state = RiddleState.Listening(standingReply = plan)
         onStatusChanged(idleStatus())
@@ -529,25 +530,25 @@ class RiddleStateMachine(
         inkCapture.setInputEnabled(false)
         inkCapture.clearRawInkLayer()
         val standingStrokes = standingReply?.strokes ?: emptyList()
-        regionView.render(PageRenderState(userStrokes = committed, replyStrokes = standingStrokes))
+        panel.render(PageRenderState(userStrokes = committed, replyStrokes = standingStrokes))
 
         if (conversation == null) {
             // No spirit to answer: skip the ink-drinking ritual and write the
             // excuse straight away, laid out below where the writing was
             // (main.rs:432-437). Like `beginReplying`, the page blanks first —
             // a reply is always revealed onto a clear page.
-            regionView.render(PageRenderState.EMPTY)
+            panel.render(PageRenderState.EMPTY)
             state = writeWholeReply(
                 text = excuseFor("no key"),
                 now = now,
-                startYPx = replyStartBelow(committed, regionView.drawingRect().height, lineHeightPx = replyLineHeightPx),
+                startYPx = replyStartBelow(committed, panel.drawingRect().height, lineHeightPx = replyLineHeightPx),
             )
             onStatusChanged("Replying (chưa cấu hình LLM key)")
             return
         }
 
         requestReply(committed)
-        regionView.render(
+        panel.render(
             PageRenderState(
                 userStrokes = committed,
                 replyStrokes = standingStrokes,
@@ -555,8 +556,8 @@ class RiddleStateMachine(
             ),
         )
         val dirtyRect = union(inkBounds(committed), writeBounds(standingStrokes))
-            ?: regionView.drawingRect()
-        refresher.requestFastPartialRefresh(regionView, dirtyRect)
+            ?: panel.drawingRect()
+        panel.requestFastPartialRefresh(dirtyRect)
         state = RiddleState.Drinking(
             committedStrokes = committed,
             standingReply = standingReply,
@@ -569,6 +570,8 @@ class RiddleStateMachine(
 
     private fun requestReply(strokes: List<InkStroke>) {
         val diary = conversation ?: return
+        // A page is genuinely in flight from here — see [PendingTurnMarker].
+        pendingTurnMarker.set()
         // Bound to the queue live at launch, so a request abandoned mid-flight
         // cannot post into the one the next turn reads.
         val events = replyEvents
@@ -623,7 +626,7 @@ class RiddleStateMachine(
             s = s,
             now = now,
             event = replyEvents.poll(),
-            page = regionView.drawingRect(),
+            page = panel.drawingRect(),
             pageInFlight = lastCommittedStrokes,
         )
         carryOut(decision ?: return)
@@ -646,13 +649,13 @@ class RiddleStateMachine(
             fontSizePx = replyFontSizePx,
             lineHeightPx = replyLineHeightPx,
             startYPx = startYPx,
-            bottomLimitPx = regionView.drawingRect().height - REPLY_BOTTOM_PX,
+            bottomLimitPx = panel.drawingRect().height - REPLY_BOTTOM_PX,
         )
         replyCursor = ReplyRevealCursor()
         pendingText.setLength(0)
         written.reset()
         turnRecorded = false
-        regionView.beginReply()
+        panel.beginReply()
     }
 
     /** A reply that is already whole — a greeting, an excuse, a short answer. */
@@ -756,7 +759,7 @@ class RiddleStateMachine(
         val newlyRevealed = cursor.revealMore(REPLY_POINTS_PER_TICK)
         val newBounds = writeBounds(newlyRevealed)
         if (newlyRevealed.isNotEmpty()) {
-            regionView.appendReplyStrokes(newlyRevealed, newBounds ?: regionView.drawingRect())
+            panel.appendReplyStrokes(newlyRevealed, newBounds ?: panel.drawingRect())
         }
         var dirty = union(next.pendingDirtyRect, newBounds)
 
@@ -771,7 +774,7 @@ class RiddleStateMachine(
         // faster than the hardware could drain them (see class doc).
         val done = next.streamEnded && cursor.caughtUp && writeCursor?.pageFull != true
         val (flushedRect, lastRefreshAtMs) = if (dirty != null && (done || now - next.lastRefreshAtMs >= REPLY_REFRESH_INTERVAL_MS)) {
-            refresher.requestHandwritingRefresh(regionView, dirty)
+            panel.requestHandwritingRefresh(dirty)
             null to now
         } else {
             dirty to next.lastRefreshAtMs
@@ -889,12 +892,12 @@ class RiddleStateMachine(
     ): Pair<RiddleState.Replying, PageRect?> {
         if (!waiting) {
             val showing = s.blotAt ?: return s to null
-            regionView.render(PageRenderState.EMPTY)
+            panel.render(PageRenderState.EMPTY)
             return s.copy(blotAt = null) to blotRect(showing)
         }
         if (now < s.nextBlotAtMs) return s to null
         val at = if (s.blotAt == null) writeCursor?.penPoint else null
-        regionView.render(if (at == null) PageRenderState.EMPTY else PageRenderState(blotAt = at))
+        panel.render(if (at == null) PageRenderState.EMPTY else PageRenderState(blotAt = at))
         val moved = at ?: s.blotAt
         return s.copy(blotAt = at, nextBlotAtMs = now + PULSE_MS) to moved?.let { blotRect(it) }
     }
@@ -906,34 +909,35 @@ class RiddleStateMachine(
     private fun turnPage() {
         val cursor = writeCursor ?: return
         Log.i(TAG, "reply fills the page, carrying on overleaf")
-        regionView.render(PageRenderState.EMPTY)
-        regionView.beginReply()
+        panel.render(PageRenderState.EMPTY)
+        panel.beginReply()
         replyCursor = ReplyRevealCursor().apply { add(cursor.nextPage()) }
         // A whole page of ink leaving at once is exactly what a full refresh
         // is for — and it pays off the ghosting this turn has built up.
         turnsSinceFullRefresh = 0
-        refresher.requestFullRefresh(regionView)
+        panel.requestFullRefresh()
     }
 
     /**
      * The reply is written: hand the page back to the writer with that reply
      * still standing on it.
      *
-     * The reply moves off [RegionView]'s reply layer and into the render state
-     * first. The layer is a baked bitmap — it can only leave as one block,
-     * where the standing reply has to dissolve point by point alongside the
-     * next page of writing. Handing the plan over before retiring the layer
-     * keeps the picture identical across the switch (RegionView draws exactly
-     * what it holds).
+     * The reply moves off [com.riddleboox.app.ui.RegionView]'s reply layer and
+     * into the render state first. The layer is a baked bitmap — it can only
+     * leave as one block, where the standing reply has to dissolve point by
+     * point alongside the next page of writing. Handing the plan over before
+     * retiring the layer keeps the picture identical across the switch
+     * (RegionView draws exactly what it holds).
      */
     private fun finishTurn() {
+        pendingTurnMarker.clear()
         val plan = writeCursor?.plan() ?: WritePlan(emptyList())
-        regionView.render(PageRenderState(replyStrokes = plan.strokes))
-        regionView.clearReplyLayer()
+        panel.render(PageRenderState(replyStrokes = plan.strokes))
+        panel.clearReplyLayer()
         writeCursor = null
         replyCursor = null
         pendingText.setLength(0)
-        settleFinishedTurn(writeBounds(plan.strokes) ?: regionView.drawingRect())
+        settleFinishedTurn(writeBounds(plan.strokes) ?: panel.drawingRect())
         inkCapture.setInputEnabled(true)
         state = RiddleState.Listening(standingReply = plan)
         onStatusChanged(idleStatus())
@@ -949,9 +953,9 @@ class RiddleStateMachine(
         turnsSinceFullRefresh++
         if (turnsSinceFullRefresh >= TURNS_PER_FULL_REFRESH) {
             turnsSinceFullRefresh = 0
-            refresher.requestFullRefresh(regionView)
+            panel.requestFullRefresh()
         } else {
-            refresher.requestQualityPartialRefresh(regionView, area)
+            panel.requestQualityPartialRefresh(area)
         }
     }
 
@@ -1011,22 +1015,23 @@ class RiddleStateMachine(
     /** Abandon whatever is happening and return the page to blank paper. */
     private fun clearPage() {
         abandonReply()
+        pendingTurnMarker.clear()
         lastPenUpAtMs = null
         strokeStore.clear()
         inkCapture.setInputEnabled(true)
         inkCapture.clearRawInkLayer()
         // Clearing mid-reply would otherwise leave that reply's ink baked into
         // the layer, showing through the blank page it returns to.
-        regionView.clearReplyLayer()
+        panel.clearReplyLayer()
         writeCursor = null
         replyCursor = null
         pendingText.setLength(0)
         // Abandoned on purpose, so it is not recorded and does not leak into
         // the next turn: the writer asked for a clean page mid-reply.
         written.reset()
-        regionView.render(PageRenderState.EMPTY)
+        panel.render(PageRenderState.EMPTY)
         turnsSinceFullRefresh = 0
-        refresher.requestFullRefresh(regionView)
+        panel.requestFullRefresh()
     }
 
     companion object {

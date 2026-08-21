@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+        The writer's books live in shared storage as ordinary files
+        (/sdcard/Books/*.epub). READ_EXTERNAL_STORAGE does not reach them: from
+        Android 10 it grants media only, and a book is not media. All-files
+        access is the one permission that opens them, and it is not granted by
+        a dialog: the user turns it on under Settings > Apps > Special access >
+        All files access, or it is set once over adb with `appops set` (a double
+        dash before `uid` cannot be written inside an XML comment; see README).
+
+        Without it the diary still knows every book on the device, how far the
+        writer has read and everything they marked — all of that comes from the
+        reader's own database below, which needs no file access. Only reading
+        the words inside a book stops working.
+    -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+    <!--
+        NeoReader publishes its library — books, highlights, bookmarks — as an
+        exported content provider under this authority, and asks for no
+        permission to read it. Package visibility filtering still applies: an
+        app targeting API 30 or later cannot see a provider in a package it has
+        not named, and ContentResolver.query returns null rather than failing,
+        so leaving this out looks like a reader with an empty shelf.
+    -->
+    <queries>
+        <package android:name="com.onyx" />
+        <package android:name="com.onyx.kreader" />
+        <provider android:authorities="com.onyx.content.database.ContentProvider" />
+        <provider android:authorities="com.onyx.android.sdk.note.ContentProvider" />
+        <provider android:authorities="com.onyx.android.sdk.shape.ContentProvider" />
+    </queries>
+
+    <application
+        android:name=".RiddleBooxApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        tools:replace="android:allowBackup">
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false" />
+        <activity
+            android:name=".AgentsActivity"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false" />
+        <activity
+            android:name=".MemoriesActivity"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:exported="false" />
+        <activity
+            android:name=".history.HistoryActivity"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:exported="false" />
+        <activity
+            android:name=".history.TranscriptActivity"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:exported="false" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.onyx.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>

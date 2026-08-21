@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — RiddleBoox</title>
+<style>
+  :root { --paper: #F2ECDD; --ink: #1a1a1a; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 64px 24px 96px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.25em; }
+  .updated { color: #6b6558; font-size: 0.9rem; margin-bottom: 2.5em; }
+  h2 { font-size: 1.25rem; margin-top: 2.2em; border-bottom: 1px solid #d8d0bd; padding-bottom: 0.3em; }
+  p, li { font-size: 1rem; }
+  ul { padding-left: 1.3em; }
+  a { color: var(--ink); }
+  .back { display: inline-block; margin-bottom: 2em; text-decoration: none; color: #6b6558; }
+  code { background: #e8e0cc; padding: 0.1em 0.4em; border-radius: 3px; font-size: 0.9em; }
+</style>
+</head>
+<body>
+  <a class="back" href="/">&larr; RiddleBoox</a>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Effective date: August 21, 2026</p>
+
+  <p>RiddleBoox ("the app") is a native Android diary app for BOOX (Onyx) e-ink
+  tablets, developed by an individual developer. This policy explains what data
+  the app handles, why, and what choices you have.</p>
+
+  <h2>What RiddleBoox does not do</h2>
+  <ul>
+    <li>No account or sign-in is required or offered. The app has no server of
+    its own and does not know who you are.</li>
+    <li>No advertising and no analytics or tracking SDKs are included in the
+    app.</li>
+    <li>Nothing is sold to third parties.</li>
+  </ul>
+
+  <h2>What the app stores on your device</h2>
+  <p>Everything you write — page images, transcripts, conversation history,
+  agent workspaces, and settings — is stored locally in the app's private
+  storage on your tablet. Your AI provider API key is stored in an encrypted
+  file backed by the Android Keystore, not in plain text.</p>
+
+  <h2>What leaves your device, and why</h2>
+  <p>RiddleBoox is "bring your own key": to generate a reply, the page you
+  wrote (as an image and/or transcribed text) and the recent conversation
+  thread are sent directly from your device to the AI service you configure
+  in Settings — by default an OpenRouter endpoint, or any OpenAI-compatible
+  endpoint you choose. That request is authenticated with your own API key.
+  This is necessary for the app's core feature to work at all, and it happens
+  only when you send a page.</p>
+  <p>The app developer does not receive, log, or have access to this content.
+  It is a direct connection between your device and the AI provider you
+  chose, governed by that provider's own privacy policy (for example,
+  <a href="https://openrouter.ai/privacy" target="_blank" rel="noopener">OpenRouter's</a>
+  if you use the default).</p>
+
+  <h2>Device permissions</h2>
+  <ul>
+    <li><strong>All files access</strong> (<code>MANAGE_EXTERNAL_STORAGE</code>) —
+    used only to let the library agent read book files (e.g. EPUB) already on
+    your device's shared storage, so it can discuss or search them when you
+    ask. Books are read locally; RiddleBoox does not upload your library.</li>
+    <li><strong>Internet access</strong> — used to reach the AI endpoint you
+    configure, and to let the library agent download a book when you
+    explicitly ask it to.</li>
+  </ul>
+  <p>RiddleBoox also reads your BOOX Notes/library metadata (titles, reading
+  progress, highlights) through Onyx's on-device content providers, so agents
+  can reference what you're reading. This data stays on-device unless it
+  becomes part of a page you send to your AI provider as described above.</p>
+
+  <h2>Your choices</h2>
+  <ul>
+    <li>You choose which AI provider and model to use, or can run the app
+    with no API key configured (the diary stays offline and does not reply).</li>
+    <li>Deleting the app removes all locally stored data. There is no server
+    copy to separately request deletion of.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>RiddleBoox is not directed at children and does not knowingly collect
+  data from children.</p>
+
+  <h2>A note on care</h2>
+  <p>RiddleBoox can be a gentle space to reflect, but it is not a therapist,
+  crisis service, or substitute for professional mental-health care.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes, the updated version will be published at this
+  same address with a new effective date.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy: <a href="mailto:nguyenvanduocit@gmail.com">nguyenvanduocit@gmail.com</a></p>
+</body>
+</html>

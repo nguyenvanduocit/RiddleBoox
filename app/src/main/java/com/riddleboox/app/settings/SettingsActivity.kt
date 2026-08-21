@@ -47,7 +47,6 @@ class SettingsActivity : Activity() {
     private lateinit var apiKeyField: EditText
     private lateinit var modelField: TextView
     private lateinit var fontSizeField: TextView
-    private lateinit var fontSizePreview: HandwritingPreviewView
     private lateinit var sendModeField: TextView
     private lateinit var libraryField: TextView
     private var chosenModel: String = ""
@@ -86,7 +85,6 @@ class SettingsActivity : Activity() {
         loadedFontSize = currentFontSize
         chosenFontSize = currentFontSize
         fontSizeField = chooserField(currentFontSize.label) { pickFontSize() }
-        fontSizePreview = HandwritingPreviewView(this).apply { fontSizePx = currentFontSize.px }
 
         sendModeStore = SendModeStore(this)
         val currentSendMode = sendModeStore.read()
@@ -102,7 +100,6 @@ class SettingsActivity : Activity() {
             addView(field("api key", apiKeyField))
             addView(field("model", modelField))
             addView(field("cỡ chữ trả lời", fontSizeField))
-            addView(fontSizePreview, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(140)))
             addView(field("chế độ gửi", sendModeField))
             addView(field("sách trên máy", libraryField))
             // Không tự finish() ở đây — gọi lại save() để không đánh mất các
@@ -233,8 +230,8 @@ class SettingsActivity : Activity() {
 
     /**
      * Presets, not a raw number: a hand-typed pixel value on a stylus tablet
-     * is how a working setup turns into unreadable ink. The preview updates
-     * on every tap so the choice is made by eye, not by trusting the label.
+     * is how a working setup turns into unreadable ink or a page that holds
+     * three words.
      */
     private fun pickFontSize() {
         val choices = ReplyFontSize.entries
@@ -244,7 +241,6 @@ class SettingsActivity : Activity() {
             .setSingleChoiceItems(labels, choices.indexOf(chosenFontSize)) { dialog, which ->
                 chosenFontSize = choices[which]
                 fontSizeField.text = chosenFontSize.label
-                fontSizePreview.fontSizePx = chosenFontSize.px
                 dialog.dismiss()
             }
             .show()
