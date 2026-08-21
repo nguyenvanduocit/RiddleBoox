@@ -47,6 +47,49 @@ class WorkspaceToolsTest {
         assertTrue(folder.root.isDirectory)
     }
 
+    @Test
+    fun `an empty directory can be deleted`() {
+        val tools = WorkspaceTools(folder.root)
+        call(tools, "workspace_mkdir", "path" to "empty")
+        assertTrue(call(tools, "workspace_delete", "path" to "empty").contains("Deleted"))
+        assertTrue(call(tools, "workspace_stat", "path" to "empty").contains("does not exist"))
+    }
+
+    /** The tool's own description promises "a file or an empty directory" — a non-empty one must refuse, not wipe the subtree. */
+    @Test
+    fun `deleting a non-empty directory is refused rather than wiping its contents`() {
+        val tools = WorkspaceTools(folder.root)
+        call(tools, "workspace_write", "path" to "notes/a.txt", "content" to "a")
+        call(tools, "workspace_write", "path" to "notes/b.txt", "content" to "b")
+
+        assertTrue(call(tools, "workspace_delete", "path" to "notes").contains("Refusing"))
+
+        assertTrue(call(tools, "workspace_read", "path" to "notes/a.txt").contains("a"))
+        assertTrue(call(tools, "workspace_read", "path" to "notes/b.txt").contains("b"))
+    }
+
+    @Test
+    fun `write and append report the character count, not the whole content`() {
+        val tools = WorkspaceTools(folder.root)
+        val written = call(tools, "workspace_write", "path" to "note.txt", "content" to "hello")
+        assertEquals("Wrote note.txt (5 characters).", written)
+
+        val appended = call(tools, "workspace_append", "path" to "note.txt", "content" to "world")
+        assertEquals("Appended to note.txt (10 characters).", appended)
+    }
+
+    /** `old_text` that self-overlaps (like "aa" in "aaa") must be counted the same way `replace` actually replaces it: non-overlapping. */
+    @Test
+    fun `edit reports the number of replacements String_replace actually performs, not overlapping window matches`() {
+        val tools = WorkspaceTools(folder.root)
+        call(tools, "workspace_write", "path" to "run.txt", "content" to "aaa")
+
+        val result = call(tools, "workspace_edit", "path" to "run.txt", "old_text" to "aa", "new_text" to "X", "replace_all" to "true")
+
+        assertTrue("only String.replace's own count should be reported", result.contains("Replaced 1 occurrence"))
+        assertTrue(call(tools, "workspace_read", "path" to "run.txt").contains("Xa"))
+    }
+
     // Characterization tests for `grep` (WorkspaceTools.kt), written against the current
     // implementation before a nesting-reduction refactor, to pin down exact behavior so the
     // refactor cannot silently change it.

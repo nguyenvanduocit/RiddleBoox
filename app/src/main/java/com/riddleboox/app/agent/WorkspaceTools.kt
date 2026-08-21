@@ -238,7 +238,7 @@ class WorkspaceTools(workspace: File) : Toolbox {
         } finally {
             if (tmp.exists()) tmp.delete()
         }
-        return "${if (append) "Appended to" else "Wrote"} ${file.relativeTo(root).path} ($next characters)."
+        return "${if (append) "Appended to" else "Wrote"} ${file.relativeTo(root).path} (${next.length} characters)."
     }
 
     private fun edit(path: String, oldText: String, newText: String, replaceAll: Boolean): String {
@@ -246,18 +246,36 @@ class WorkspaceTools(workspace: File) : Toolbox {
         val file = resolve(path)
         if (!file.isFile) return "Not a file: $path"
         val before = readText(file)
-        val count = before.windowed(oldText.length, partialWindows = false).count { it == oldText }
+        // Non-overlapping, matching how `replace`/`replaceFirst` below actually
+        // scan: `before.windowed(oldText.length).count { it == oldText }` would
+        // count "aa" twice in "aaa", but String.replace("aa", ...) only ever
+        // performs one replacement there.
+        val count = countOccurrences(before, oldText)
         if (count == 0) return "Text not found in $path."
         val after = if (replaceAll) before.replace(oldText, newText) else before.replaceFirst(oldText, newText)
         return write(path, after, append = false) + " Replaced ${if (replaceAll) count else 1} occurrence(s)."
     }
 
+    private fun countOccurrences(text: String, needle: String): Int {
+        var count = 0
+        var index = 0
+        while (true) {
+            val found = text.indexOf(needle, index)
+            if (found < 0) break
+            count++
+            index = found + needle.length
+        }
+        return count
+    }
+
+    /** Matches the tool's own contract: a file, or a directory with nothing left in it. */
     private fun delete(path: String): String {
         val file = resolve(path)
         require(file != root) { "Workspace root cannot be deleted" }
         if (!file.exists()) return "Nothing to delete at $path."
-        val count = countNodes(file)
-        require(count <= MAX_VISITED) { "Refusing to delete more than $MAX_VISITED workspace entries" }
+        require(!file.isDirectory || file.listFiles().isNullOrEmpty()) {
+            "Refusing to delete non-empty directory $path; delete its contents first"
+        }
         require(deleteRecursively(file)) { "Could not delete $path" }
         return "Deleted $path."
     }
@@ -354,8 +372,6 @@ class WorkspaceTools(workspace: File) : Toolbox {
         require(file.length() <= MAX_FILE_CHARS * 4L) { "Artifact is too large to inspect" }
         return file.readText()
     }
-
-    private fun countNodes(file: File): Int = walk(file).count() + 1
 
     private fun deleteRecursively(file: File): Boolean {
         if (file.isDirectory) file.listFiles()?.forEach { if (!deleteRecursively(it)) return false }
