@@ -186,3 +186,85 @@ has no junction/degree-≥3 case, so this is genuinely untested, but the
 would diverge from the deliberately-mirrored Rust reference and rewrite every
 existing test's exact expected coordinate sequence. Add a junction test case
 first if this turns out to matter visually; don't change the algorithm blind.
+
+## 6. `Conversation.ask()` bakes a permanent empty-content message into live history on an illegible page (Medium-High) — same class of trade-off as #3, needs a product call
+
+`app/src/main/java/com/riddleboox/app/reply/Conversation.kt:418`:
+
+```kotlin
+history = prompt(page.withMessages { messages -> messages.dropLast(1) }) { user(turn.transcript) }
+if (turn.reply.isNotBlank()) history = prompt(history) { assistant(turn.reply) }
+```
+
+Builds `user(turn.transcript)` unconditionally, even when `turn.transcript == ""`
+(the documented, expected outcome for an illegible page — `TURN_PROTOCOL` at
+`Conversation.kt:76` tells the model to leave transcript empty then, and
+`PERSONA` has it say "the ink blurred"). `restore()`, four lines below
+(`Conversation.kt:474`), guards the identical construction:
+`if (turn.transcript.isNotBlank()) history = prompt(history) { user(turn.transcript) }`,
+with a comment explaining why: *"Replayed literally it would become an empty
+user message, which some OpenAI-compatible servers reject outright."*
+
+That guard only protects a conversation reloaded from storage. `ask()`'s empty
+`user("")` gets baked into the **live** `history` and replayed on every
+subsequent `ask()` call in the same session (until it slides out of
+`keptMessages`'s window) — so a server that would reject an empty user message
+risks failing on *later* turns too, not just on resume.
+
+**Why not fixed here:** the obvious mirror-image fix (guard `ask()`'s
+`user(turn.transcript)` the same way `restore()` does) reproduces the exact
+trade-off `restore()`'s own test already accepts for the single-turn case:
+skipping the user message entirely can leave two `assistant()` messages back
+to back with no `user()` between them once a real reply follows an illegible
+one — an alternation gap of a different kind than the one being fixed. A
+non-empty placeholder (e.g. `user("(trang không đọc được)")`) avoids that, but
+choosing what a placeholder says to the model is a prompt-design decision, not
+a mechanical fix. Needs a human call on the replacement, not a guess made
+unattended at the end of a bug-hunt pass.
+
+**Testability:** pure logic, JVM-testable — `ConversationTest.kt` already has
+the `FakeChatServer` infrastructure this would need (call `ask()` twice, first
+with an illegible page then a legible one, inspect the second request body).
+
+## 7. `create_agent` can permanently orphan a folder if `create()` fails between writing its manifest and its prompt (Medium, narrow trigger)
+
+`app/src/main/java/com/riddleboox/app/agent/AgentTools.kt:109-112`
+(`AgentManagerTools.createAgent`'s id-dedup loop):
+
+```kotlin
+var id = requested
+var suffix = 2
+while (store.load(id) != null) id = "$requested-${suffix++}"
+```
+
+treats `store.load(id) == null` as "id is free." But `AgentStore.load()`'s own
+doc (`Agent.kt:71-76`) says it can't tell "never existed" apart from "folder
+exists but `system.md` is missing" — both return `null`. `AgentStore.create()`
+(`Agent.kt:142-174`) writes `agent.json` first, `system.md` second; if the
+second write throws (I/O error, storage full — plausible on a
+storage-constrained e-ink device), the folder is left holding a manifest with
+no prompt file, and:
+- `list_agents` can't see it (`load()` returning `null` makes `list()`'s
+  `mapNotNull` skip it).
+- `delete_agent` can't see it either (`store.load(id) ?: return "Unknown
+  agent: $id"`), so there's no way to remove it through the tool.
+- Retrying `create_agent` with the same name hits the dedup loop's blind spot
+  (`load(id) == null` says the slug is free), so `store.create()` throws
+  `"Agent already exists: $id"` on every retry — that slug is permanently
+  squatted.
+
+**Why not fixed here:** the real fix is in `AgentStore` itself — `load()` and
+the dedup loop need a way to tell "no folder" apart from "folder exists but is
+broken" (e.g. check `folder(id).exists()` directly rather than trusting
+`load()`'s null), and `ensureDefaults()` (a related, already-known gap — see
+`get_health` findings from earlier tonight, not separately filed here) has the
+same blind spot for built-in agents. That's a small but real change to
+`AgentStore`'s create/load contract, worth doing carefully with its own test
+rather than folded into an unattended bug-hunt commit. Reproducing it needs a
+forced I/O failure between the two writes (same technique
+`DiaryToolsTest.kt`'s `a file that will not delete leaves the book on the
+shelf` test already uses via `folder.setWritable(false)`) — not reachable on
+the happy path, so this is real but lower-probability.
+
+**Testability:** pure logic, JVM-testable with `TemporaryFolder`. No
+`AgentManagerToolsTest.kt` exists yet — this would be its first test.
