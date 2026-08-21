@@ -10,12 +10,14 @@ import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.FileProvider
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
 import com.riddleboox.app.ui.textBlock
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,6 +94,13 @@ class TranscriptActivity : Activity() {
             },
         )
         addView(
+            caption("chia sẻ").apply {
+                textSize = 16f
+                setPadding(0, dp(12), dp(40), dp(12))
+                setOnClickListener { share() }
+            },
+        )
+        addView(
             caption("đốt").apply {
                 textSize = 16f
                 setPadding(dp(40), dp(12), dp(12), dp(12))
@@ -103,6 +112,34 @@ class TranscriptActivity : Activity() {
     private fun resume() {
         setResult(RESULT_OK, Intent().putExtra(HistoryActivity.EXTRA_RESUME_ID, conversationId))
         finish()
+    }
+
+    /**
+     * Writes the conversation out as plain text under `cacheDir/exports` and
+     * hands the file to whatever the writer picks from the share sheet.
+     *
+     * Re-read from [store] rather than reusing [onCreate]'s already loaded
+     * conversation, so a tap on "chia sẻ" a while after the screen opened
+     * still exports what is on disk right now, not a stale snapshot.
+     *
+     * The export lives under `cacheDir`, not `filesDir` where conversations
+     * themselves are kept: it is a disposable rendering for one share, not
+     * part of the diary's record, and `cacheDir` is what `res/xml/file_paths.xml`'s
+     * `exports` root is declared against for [FileProvider].
+     */
+    private fun share() {
+        val conversation = store.load(conversationId) ?: return
+        val exportsDir = File(cacheDir, "exports").apply { mkdirs() }
+        val file = File(exportsDir, "$conversationId.txt")
+        file.writeText(conversation.toPlainText())
+
+        val uri = FileProvider.getUriForFile(this, "$packageName.onyx.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "Chia sẻ cuộc trò chuyện"))
     }
 
     /**
