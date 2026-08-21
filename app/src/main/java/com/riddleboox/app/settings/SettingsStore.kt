@@ -70,16 +70,24 @@ class SettingsStore(context: Context) {
     /**
      * Each field falls back on its own: a user who only ever edited the model
      * keeps the build-time base URL and key.
+     *
+     * Sanitized before it comes back, not just on the way in from Settings:
+     * the very first read, before the writer has ever opened that screen,
+     * falls back to [defaultBaseUrl]/[defaultApiKey]/[defaultModel] straight
+     * from `local.properties`, and nothing has trimmed those yet.
      */
     fun readOrDefault(
         defaultBaseUrl: String,
         defaultApiKey: String,
         defaultModel: String,
-    ): ReplySettings = ReplySettings(
-        baseUrl = prefs.getString(KEY_BASE_URL, defaultBaseUrl) ?: defaultBaseUrl,
-        apiKey = prefs.getString(KEY_API_KEY, defaultApiKey) ?: defaultApiKey,
-        model = prefs.getString(KEY_MODEL, defaultModel) ?: defaultModel,
-    )
+    ): ReplySettings {
+        val defaults = ReplySettings(defaultBaseUrl, defaultApiKey, defaultModel)
+        return ReplySettings(
+            baseUrl = prefs.getString(KEY_BASE_URL, defaultBaseUrl) ?: defaultBaseUrl,
+            apiKey = prefs.getString(KEY_API_KEY, defaultApiKey) ?: defaultApiKey,
+            model = prefs.getString(KEY_MODEL, defaultModel) ?: defaultModel,
+        ).sanitized(defaults)
+    }
 
     fun write(settings: ReplySettings) {
         prefs.edit()

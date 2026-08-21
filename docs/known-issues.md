@@ -91,22 +91,7 @@ or a filesystem delete partially failing) — plausible on RAM-constrained e-ink
 hardware, not an everyday path. `AgentStoreTest.kt`'s reseed test only deletes
 `system.md`, never `agent.json` — this exact state isn't covered.
 
-## 3. First-run `ReplySettings` are used un-sanitized (Low-Medium)
-
-`app/src/main/java/com/riddleboox/app/settings/SettingsStore.kt:74-82`
-(`readOrDefault`) does no trimming; only `ReplySettings.sanitized()`
-(`SettingsStore.kt:27-31`) does, and only `SettingsActivity`'s save path calls it
-(`SettingsActivity.kt:205-210`). `MainActivity.kt:270-275` reads settings via
-`readOrDefault()` directly and never sanitizes. On a cold start before the writer
-ever opens Settings, the fallback comes straight from `BuildConfig.LLM_API_KEY` /
-`LLM_BASE_URL` / `LLM_MODEL`, populated verbatim from `local.properties` — trailing
-whitespace on a `local.properties` line would flow untrimmed into the Bearer-token/
-model string, likely causing auth failures until the writer visits Settings once
-(which finally persists a trimmed copy). Narrow — depends on a slightly malformed
-`local.properties` — but real, since the sanitizer exists specifically to prevent
-this class of bug and one legitimate read path bypasses it.
-
-## 4. `PageArchive.pages()` assumes constant-width timestamps when sorting (Low, debug-only)
+## 3. `PageArchive.pages()` assumes constant-width timestamps when sorting (Low, debug-only)
 
 `app/src/main/java/com/riddleboox/app/ink/PageArchive.kt:34-36` sorts
 `page-$timestampMs.png` filenames lexicographically, which only matches
