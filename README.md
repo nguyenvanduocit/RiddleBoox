@@ -246,6 +246,29 @@ Ba điểm thiết kế đáng nhớ:
 - [x] Thiết kế refresh strategy → `docs/refresh-strategy.md` (đang vẽ = raw drawing, reply = HAND_WRITING_REPAINT/DU, cuối = GC; cần verify trên máy thật)
 - [ ] Scaffold Android app + Onyx SDK (lấy pattern cô lập 2 class của Inka)
 
+## Mã hoá lưu trữ, CI, xuất hội thoại, và nền PIN-lock
+
+- **Hội thoại mã hoá tại rest**: `ConversationStore` (`history/ConversationStore.kt`) mã hoá JSON
+  qua interface `ConversationCipher` trước khi ghi đĩa và giải mã trước khi đọc. App thật dùng
+  `KeystoreConversationCipher` (`history/KeystoreConversationCipher.kt`): AES-256-GCM, key sinh
+  và ở lại trong Android Keystore, IV ngẫu nhiên cho mỗi lần mã hoá rồi prepend vào ciphertext để
+  `decrypt` lấy lại. Test JVM dùng `NoOpConversationCipher` (mặc định của constructor 2 tham số)
+  vì Keystore không tồn tại ngoài Android runtime.
+- **CI chạy unit test**: `.github/workflows/test.yml`, trigger trên `push`/`pull_request` nhánh
+  `main`, chạy `./gradlew testDebugUnitTest --no-daemon`; fail thì upload report từ
+  `app/build/reports/tests/testDebugUnitTest/`.
+- **Xuất hội thoại ra text để chia sẻ**: nút "chia sẻ" trên `TranscriptActivity` (hàm `share()`,
+  `history/TranscriptActivity.kt`) ghi `StoredConversation.toPlainText()`
+  (`history/ConversationText.kt`) ra `cacheDir/exports/<id>.txt`, rồi mở share sheet Android qua
+  `FileProvider` (authority `${applicationId}.onyx.fileprovider`, path map ở
+  `res/xml/file_paths.xml`).
+- **Nền PIN-lock — chưa hoàn chỉnh**: `PinStore`/`PinHash` (`settings/PinStore.kt`,
+  `settings/PinHash.kt`) lưu PIN dạng salted SHA-256 hash trong `EncryptedSharedPreferences`
+  (Keystore-backed), có toggle đặt/xoá trong màn hình Settings (`SettingsActivity.kt`, hàm
+  `togglePin`). **`PinStore.verify()` chưa được gọi ở đâu trong app** — chưa có màn hình khoá,
+  chưa có gì gate `MainActivity`. Đúng như comment trong chính `PinStore.kt`: lock screen đọc
+  `verify()` lúc app khởi động là việc của một chu kỳ sau, ngoài phạm vi ở đây.
+
 ## Quyết định thiết kế
 
 - **Không dùng handwriting recognizer** (ML Kit của Inka quá dở) — giữ pipeline của Riddle:
