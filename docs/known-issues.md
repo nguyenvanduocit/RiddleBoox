@@ -91,7 +91,62 @@ or a filesystem delete partially failing) — plausible on RAM-constrained e-ink
 hardware, not an everyday path. `AgentStoreTest.kt`'s reseed test only deletes
 `system.md`, never `agent.json` — this exact state isn't covered.
 
-## 3. `PageArchive.pages()` assumes constant-width timestamps when sorting (Low, debug-only)
+## 3. `WriteCursor` drops a page-boundary line break, which can glue two paragraphs onto one line (Medium-High) — pure logic, but the fix trades one bug for a different one without a product call
+
+`app/src/main/java/com/riddleboox/app/handwriting/WriteCursor.kt:133-135`:
+
+```kotlin
+// A line break with nothing after it has nothing to put on the next
+// page; dropping it keeps `pageFull` meaning "words are waiting".
+if (held.all { it == LINE_BREAK }) held.clear()
+```
+
+`writeWhatFits()`'s `while` loop can only leave `held` non-empty by hitting one of
+its two `break`s, both gated on `!hasRoomForAnotherLine()` — i.e. the page has no
+room for one more line. When that happens on a `LINE_BREAK` token specifically
+(the model's stream ended a line/paragraph right as the page ran out), and nothing
+has been queued behind it yet (the next streamed chunk hasn't arrived from a later
+`append()` call), this cleanup clears it — which also clears `pageFull` back to
+`false`, even though the page genuinely has no room for another line.
+
+The next `append()` call (streaming continues; this class has no way to know
+whether more text is coming) then queues its words starting from an empty `held`,
+with `lineHasWord` still `true` and `penXPx` still parked mid-line from before —
+so if the new word's *width* still fits the current line (true whenever the page
+is wide enough for more than one word per line), it gets written onto the same,
+already-final line as the text before the dropped break, with no line break and no
+page turn. Verified by full manual trace against the real algorithm and the actual
+production caller (`RiddleStateMachine.feedReply()` → `writeText()`, which calls
+`cursor.append()` once per `writableCut`-settled chunk — a real multi-call
+streaming pattern, not synthetic). Not a data-loss bug — the stored transcript
+stays correct — but it visibly corrupts the on-screen handwritten reply layout at
+page boundaries, a path every multi-page, multi-sentence reply exercises.
+
+**Why not fixed here — this is not a clean-cut fix:** the obvious-looking
+correction (stop clearing `held` in this case, so a break that can't be honored
+behaves like a word that can't be honored — deferred to the next page) directly
+contradicts an existing, apparently deliberate test:
+`WriteCursorTest.kt`'s `a line break with nothing after it does not call for a new
+page` asserts `pageFull == false` for exactly this state. Worse, `pageFull` feeds
+`RiddleStateMachine`'s end-of-reply detection directly —
+`RiddleStateMachine.kt:776`: `val done = next.streamEnded && cursor.caughtUp &&
+writeCursor?.pageFull != true`. Making `pageFull` correctly `true` in this case
+would also make it `true` at the *end of a finished reply* whenever the very last
+line break happens to land exactly at the page's foot, which would stop `done`
+from ever becoming true there and force an extra, unnecessary page-turn onto a
+page with nothing left to show, before the reply is recognized as finished. Fixing
+the mid-reply corruption this way risks trading it for a stuck/extra-blank-page
+regression at reply endings — a real product trade-off between two failure modes,
+not an oversight with one obviously-correct answer. Needs a human to pick a
+direction (e.g. distinguish "no room, but more may be coming" from "stream truly
+ended" some other way — `WriteCursor` doesn't currently know which) rather than a
+guess made unattended.
+
+**Testability:** 100% pure logic, JVM-testable with the existing `FakeRaster` test
+double — no Android runtime needed to fix or verify this, only a product decision
+about which failure mode to accept.
+
+## 4. `PageArchive.pages()` assumes constant-width timestamps when sorting (Low, debug-only)
 
 `app/src/main/java/com/riddleboox/app/ink/PageArchive.kt:34-36` sorts
 `page-$timestampMs.png` filenames lexicographically, which only matches
