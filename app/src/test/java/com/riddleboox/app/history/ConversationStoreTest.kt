@@ -1,11 +1,42 @@
 package com.riddleboox.app.history
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+
+/**
+ * A plain-Java AES/GCM cipher, standing in for [KeystoreConversationCipher]
+ * in a JVM test where there is no Android Keystore to talk to. The key is
+ * generated once per test with `javax.crypto.KeyGenerator` (no
+ * `"AndroidKeyStore"` provider involved) and held in memory only — fine for
+ * proving [ConversationStore] round-trips through *a* real cipher, wrong for
+ * anything that touches production data.
+ */
+private class FakeAesConversationCipher : ConversationCipher {
+    private val key: SecretKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+
+    override fun encrypt(plaintext: ByteArray): ByteArray {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+        return cipher.iv + cipher.doFinal(plaintext)
+    }
+
+    override fun decrypt(ciphertext: ByteArray): ByteArray {
+        val iv = ciphertext.copyOfRange(0, 12)
+        val body = ciphertext.copyOfRange(12, ciphertext.size)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+        return cipher.doFinal(body)
+    }
+}
 
 class ConversationStoreTest {
 
@@ -183,5 +214,31 @@ class ConversationStoreTest {
         val store = ConversationStore(folder.newFolder())
         store.replaceLastReply("khong-ton-tai", "gì đó")
         assertTrue(store.list().isEmpty())
+    }
+
+    // ---- encryption at rest ----
+
+    /** The bytes on disk must not be the diary in the clear, whatever the file holds. */
+    @Test
+    fun `an encrypted conversation is not plaintext on disk`() {
+        val store = ConversationStore(folder.root, cipher = FakeAesConversationCipher())
+        val secret = "Ten toi la Duoc, day la nhat ky rieng tu cua toi"
+        store.appendTurn("evening-1", 1L, turn(1L, secret, "Ta se nho."))
+
+        val onDisk = store.fileFor("evening-1").readBytes()
+        val onDiskText = String(onDisk, Charsets.ISO_8859_1)
+
+        assertFalse(onDiskText.contains(secret))
+    }
+
+    /** Encryption must be transparent to the caller: what was written comes back unchanged. */
+    @Test
+    fun `an encrypted conversation round-trips through the same cipher`() {
+        val store = ConversationStore(folder.root, cipher = FakeAesConversationCipher())
+        val written = turn(1_700_000_000_000L, "Ten toi la Duoc", "Ta se nho.")
+
+        store.appendTurn("evening-1", 1_700_000_000_000L, written)
+
+        assertEquals(listOf(written), store.load("evening-1")?.turns)
     }
 }
