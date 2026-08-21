@@ -119,8 +119,15 @@ class HistoryActivity : Activity() {
         finish()
     }
 
+    /**
+     * [StoredConversation.updatedAtMs], not [StoredConversation.startedAtMs]:
+     * the list above this line is sorted newest-answered-first
+     * ([ConversationStore.list]), so the date under each entry has to agree
+     * with that ordering — a resumed evening dated by the day it *began*
+     * would show an older date sitting above a genuinely older, untouched one.
+     */
     private fun writtenOn(conversation: StoredConversation): String =
-        DAY_AND_TIME.format(Date(conversation.startedAtMs)) + " · " + conversation.turns.size + " lượt"
+        DAY_AND_TIME.format(Date(conversation.updatedAtMs)) + " · " + conversation.turns.size + " lượt"
 
     companion object {
         private const val REQUEST_READ = 1
