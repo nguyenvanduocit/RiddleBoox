@@ -49,6 +49,8 @@ class SettingsActivity : Activity() {
     private lateinit var fontSizeField: TextView
     private lateinit var sendModeField: TextView
     private lateinit var libraryField: TextView
+    private lateinit var pinStore: PinStore
+    private lateinit var pinField: TextView
     private var chosenModel: String = ""
     private var chosenFontSize: ReplyFontSize = ReplyFontSize.Default
     private var chosenSendMode: SendMode = SendMode.Auto
@@ -94,6 +96,9 @@ class SettingsActivity : Activity() {
 
         val onboardingStore = OnboardingStore(this)
 
+        pinStore = PinStore(this)
+        pinField = chooserField(pinFieldLabel()) { togglePin() }
+
         libraryField = statusField()
         val column = textBlock().apply {
             addView(field("base url", baseUrlField))
@@ -111,6 +116,12 @@ class SettingsActivity : Activity() {
                 onboardingStore.write(false)
                 save()
             }))
+            // Không đưa vào dirty()/save(): bật/tắt PIN ghi thẳng qua PinStore
+            // ngay khi chạm, không phải state chờ nút "lưu" ở đầu trang — một
+            // PIN vừa đặt mà "bỏ những thay đổi chưa lưu?" xoá mất là khoá giả.
+            // Chu kỳ này chỉ dựng chỗ đặt/xoá PIN; màn hình khoá thật đọc
+            // PinStore.verify() là việc của chu kỳ sau, chưa nối ở đây.
+            addView(field("khoá bằng mã PIN", pinField))
         }
         // "lưu" rides in the running head rather than under the last field: the
         // soft keyboard eats the lower half of the screen while a field is
@@ -260,6 +271,53 @@ class SettingsActivity : Activity() {
                 chosenSendMode = choices[which]
                 sendModeField.text = chosenSendMode.label
                 dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun pinFieldLabel(): String = if (pinStore.isSet()) "đã bật" else "chưa đặt"
+
+    /** Only two states matter to the tap: nothing set yet, or something to turn back off. */
+    private fun togglePin() {
+        if (pinStore.isSet()) confirmDisablePin() else promptSetPin()
+    }
+
+    private fun promptSetPin() {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this)
+            .setTitle("đặt mã PIN")
+            .setView(input)
+            .setNegativeButton("thôi", null)
+            .setPositiveButton("đặt") { _, _ -> trySetPin(input.text.toString()) }
+            .show()
+    }
+
+    /**
+     * Validated here rather than left to [PinStore.set]: a store that can be
+     * handed a 2-digit or empty PIN and silently accept it is how a writer
+     * ends up locked out by a PIN they mistyped once and never actually set.
+     */
+    private fun trySetPin(pin: String) {
+        if (pin.length < 4 || !pin.all { it.isDigit() }) {
+            AlertDialog.Builder(this)
+                .setMessage("PIN cần ít nhất 4 chữ số")
+                .setPositiveButton("thôi", null)
+                .show()
+            return
+        }
+        pinStore.set(pin)
+        pinField.text = pinFieldLabel()
+    }
+
+    private fun confirmDisablePin() {
+        AlertDialog.Builder(this)
+            .setMessage("Tắt khoá PIN?")
+            .setNegativeButton("thôi", null)
+            .setPositiveButton("tắt") { _, _ ->
+                pinStore.clear()
+                pinField.text = pinFieldLabel()
             }
             .show()
     }
