@@ -272,36 +272,7 @@ fun decideThinking(
             ),
         )
 
-        is ReplyEvent.Error -> {
-            // A request that never left the device keeps retrying until the
-            // patience budget runs out — this panel's Wi-Fi drops DNS for tens
-            // of seconds whenever it changes bands, which outlasts a
-            // three-attempt budget. A provider-side 429 gets the same
-            // unlimited-attempts treatment (it resolves on its own, same as a
-            // Wi-Fi blip) but backs off instead of retrying at a flat interval.
-            // Anything else (a bad key, a wrong model) will fail the same way
-            // forever, so it gets three.
-            val unreachable = isUnreachable(event.message)
-            val rateLimited = isRateLimited(event.message)
-            val attempt = s.retryCount + 1
-            if (unreachable || rateLimited || s.retryCount < REPLY_RETRY_LIMIT) {
-                val delay = if (rateLimited) rateLimitRetryDelayMs(attempt) else REPLY_RETRY_DELAY_MS
-                return Decision(
-                    state = s.copy(retryCount = attempt, retryAtMs = now + delay),
-                    effects = listOf(
-                        Effect.Note("reply retry $attempt after: ${event.message}", warning = true),
-                        Effect.Status(
-                            when {
-                                rateLimited -> "Quá nhiều yêu cầu — đang chờ rồi thử lại (lần $attempt)…"
-                                unreachable -> "Mất kết nối — đang thử lại (lần $attempt)…"
-                                else -> "Trục trặc — thử lại $attempt/$REPLY_RETRY_LIMIT…"
-                            },
-                        ),
-                    ),
-                )
-            }
-            return excuse(event.message, now, page)
-        }
+        is ReplyEvent.Error -> return decideError(s, now, event, page)
 
         null -> Unit
     }
@@ -311,19 +282,55 @@ fun decideThinking(
         return giveUp.copy(effects = listOf(Effect.AbandonRequest) + giveUp.effects)
     }
 
-    val retryAt = s.retryAtMs
-    if (retryAt != null) {
-        if (now < retryAt) return null
-        return Decision(
-            state = s.copy(retryAtMs = null),
-            effects = listOf(Effect.AskDiary(pageInFlight)),
-        )
-    }
-
     // Nothing has happened and nothing is due: the page is already blank and
     // the status line already says what it is waiting for, so this tick has
     // nothing to change.
-    return null
+    val retryAt = s.retryAtMs ?: return null
+    if (now < retryAt) return null
+    return Decision(
+        state = s.copy(retryAtMs = null),
+        effects = listOf(Effect.AskDiary(pageInFlight)),
+    )
+}
+
+/**
+ * A request the diary reported as failed: retried if the budget allows, or
+ * written out as an excuse in its place.
+ *
+ * A request that never left the device keeps retrying until the patience
+ * budget runs out — this panel's Wi-Fi drops DNS for tens of seconds whenever
+ * it changes bands, which outlasts a three-attempt budget. A provider-side
+ * 429 gets the same unlimited-attempts treatment (it resolves on its own,
+ * same as a Wi-Fi blip) but backs off instead of retrying at a flat interval.
+ * Anything else (a bad key, a wrong model) will fail the same way forever, so
+ * it gets three.
+ */
+private fun decideError(
+    s: RiddleState.Thinking,
+    now: Long,
+    event: ReplyEvent.Error,
+    page: PageRect,
+): Decision {
+    val unreachable = isUnreachable(event.message)
+    val rateLimited = isRateLimited(event.message)
+    val attempt = s.retryCount + 1
+    if (unreachable || rateLimited || s.retryCount < REPLY_RETRY_LIMIT) {
+        val delay = if (rateLimited) rateLimitRetryDelayMs(attempt) else REPLY_RETRY_DELAY_MS
+        return Decision(
+            state = s.copy(retryCount = attempt, retryAtMs = now + delay),
+            effects = listOf(
+                Effect.Note("reply retry $attempt after: ${event.message}", warning = true),
+                Effect.Status(
+                    when {
+                        rateLimited -> "Quá nhiều yêu cầu — đang chờ rồi thử lại (lần $attempt)…"
+                        unreachable -> "Mất kết nối — đang thử lại (lần $attempt)…"
+                        else -> "Trục trặc — thử lại $attempt/$REPLY_RETRY_LIMIT…"
+                    },
+                ),
+            ),
+        )
+    }
+    return excuse(event.message, now, page)
 }
 
 /**
