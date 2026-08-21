@@ -280,17 +280,23 @@ class WorkspaceTools(workspace: File) : Toolbox {
         val needle = pattern ?: Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE)
         val matches = ArrayList<String>()
         for (file in walk(start)) {
-            if (!file.isFile || file.length() > MAX_FILE_CHARS * 4L) continue
-            val lines = runCatching { readText(file).lineSequence().toList() }.getOrNull() ?: continue
-            for ((index, line) in lines.withIndex()) {
-                if (needle.matcher(line).find()) {
-                    matches += "${file.relativeTo(root).path}:${index + 1}: ${line.take(500)}"
-                    if (matches.size >= limit) break
-                }
-            }
             if (matches.size >= limit) break
+            if (!file.isFile || file.length() > MAX_FILE_CHARS * 4L) continue
+            matches += matchesIn(file, needle, limit - matches.size)
         }
         return if (matches.isEmpty()) "No workspace text matches \"$query\"." else matches.joinToString("\n")
+    }
+
+    /** Matching lines in [file], formatted as `path:lineNumber: text`, capped at [remaining] results. */
+    private fun matchesIn(file: File, needle: Pattern, remaining: Int): List<String> {
+        val lines = runCatching { readText(file).lineSequence().toList() }.getOrNull() ?: return emptyList()
+        val found = ArrayList<String>()
+        for ((index, line) in lines.withIndex()) {
+            if (found.size >= remaining) break
+            if (!needle.matcher(line).find()) continue
+            found += "${file.relativeTo(root).path}:${index + 1}: ${line.take(500)}"
+        }
+        return found
     }
 
     private fun regexSearch(pattern: String, path: String, requestedLimit: Int): String {
