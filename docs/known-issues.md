@@ -156,3 +156,33 @@ RTC, before NTP sync — a known failure mode on cheap tablets) would produce a
 shorter numeric string that sorts out of true order, and `prune()`
 (`PageArchive.kt:38-40`) would delete the wrong files relative to "newest."
 `pageArchive` is DEBUG-build-only (`MainActivity.kt:291-294`), so impact is low.
+
+## 5. `SkeletonTracer`'s greedy walk can switch branches at a stroke junction (Low, likely not worth fixing)
+
+`app/src/main/java/com/riddleboox/app/handwriting/SkeletonTracer.kt:59-69`
+(`neighbours`) scans a pixel's 8 neighbours in fixed top-left-to-bottom-right
+order with no preference for "the direction the walk was already going in."
+`trace()`'s greedy walk (`SkeletonTracer.kt:44-48`) always takes
+`neighbours(...).firstOrNull { !visited }` — so at a degree-≥3 pixel (a
+junction, e.g. where a letter's stem crosses its crossbar), the walk can jump
+onto a different branch than the one it was tracing, rather than continuing
+straight through. Verified by a 1:1 Python transliteration of the algorithm
+against a "+"-shaped mask: the walk starting at the stem's top goes one step
+down, then turns onto the *left arm* of the crossbar instead of continuing down
+the stem — the stem's bottom half and the crossbar's right arm end up in a
+*different* stroke.
+
+**Why this is probably not worth fixing:** `SkeletonTracer.trace()` is an
+explicit, faithful port of `references/Riddle/src/script.rs:128-196` (see the
+class doc) — this exact greedy-first-unvisited-neighbour behavior at junctions
+is inherited from the already-validated reference implementation, not a
+porting mistake. No ink is lost (every consecutive pair in a path is
+8-connected, so `drawLine` between them never skips pixels) — the only
+possible effect is the *order* strokes are drawn/animated in at a junction,
+which might read slightly differently than a hand's natural stroke order but
+has not been verified as visually wrong on a real device. `SkeletonTracerTest.kt`
+has no junction/degree-≥3 case, so this is genuinely untested, but the
+"obvious" fix (prefer the neighbour that continues the current direction)
+would diverge from the deliberately-mirrored Rust reference and rewrite every
+existing test's exact expected coordinate sequence. Add a junction test case
+first if this turns out to matter visually; don't change the algorithm blind.
