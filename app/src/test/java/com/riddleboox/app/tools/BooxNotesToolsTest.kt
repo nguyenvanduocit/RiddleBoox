@@ -1,12 +1,17 @@
 package com.riddleboox.app.tools
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.io.File
 
 class BooxNotesToolsTest {
@@ -185,5 +190,124 @@ class BooxNotesToolsTest {
         }
 
         override fun renameNote(note: String, title: String): BooxNote = this.note.copy(title = title)
+    }
+}
+
+/**
+ * Characterizes [OnyxBooxNotes.exportedFiles] (a BFS over `note/` matching exported
+ * page files to a notebook title) before refactoring it for nesting. It has no other
+ * seam that reaches it without a real BOOX Notebook ContentProvider, hence Robolectric
+ * here just for a working [android.content.ContentResolver] — the function itself never
+ * calls it.
+ */
+@RunWith(RobolectricTestRunner::class)
+class OnyxBooxNotesExportedFilesTest {
+
+    @get:Rule
+    val folder = TemporaryFolder()
+
+    private fun onyxNotes(noteRoot: File): OnyxBooxNotes {
+        val resolver = ApplicationProvider.getApplicationContext<Context>().contentResolver
+        return OnyxBooxNotes(resolver, noteRoot = noteRoot, ksyncRoot = folder.newFolder())
+    }
+
+    private fun note(title: String) = BooxNote(
+        id = "note-1",
+        title = title,
+        createdAtMs = 0,
+        updatedAtMs = 0,
+        pageCount = 1,
+        pageIds = emptyList(),
+        richTextPageIds = emptyList(),
+        source = null,
+        favorite = false,
+    )
+
+    @Test
+    fun `no file matches an unrelated title`() {
+        val root = folder.newFolder()
+        File(root, "receipt.png").writeText("x")
+
+        val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `a file directly under noteRoot that matches the title is found`() {
+        val root = folder.newFolder()
+        val match = File(root, "travel-journal-cover.png").apply { writeText("x") }
+        File(root, "other.png").apply { writeText("x") }
+
+        val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
+
+        assertEquals(listOf(match), result)
+    }
+
+    @Test
+    fun `a file nested inside a subdirectory that matches the title is found`() {
+        val root = folder.newFolder()
+        val sub = File(root, "trips").apply { mkdirs() }
+        val match = File(sub, "travel-journal-page1.png").apply { writeText("x") }
+
+        val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
+
+        assertEquals(listOf(match), result)
+    }
+
+    @Test
+    fun `a file six directory levels deep is unreachable, five levels deep is not`() {
+        val root = folder.newFolder()
+        var dir = root
+        repeat(5) { i -> dir = File(dir, "L${i + 1}").apply { mkdirs() } }
+        val shallow = File(dir, "travel-journal-shallow.png").apply { writeText("x") }
+        val tooDeep = File(dir, "L6").apply { mkdirs() }
+        File(tooDeep, "travel-journal-deep.png").apply { writeText("x") }
+
+        val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
+
+        assertEquals(listOf(shallow), result)
+    }
+
+    @Test
+    fun `a matching file that is not an image or pdf is skipped`() {
+        val root = folder.newFolder()
+        File(root, "travel-journal-notes.txt").apply { writeText("x") }
+        val pdfMatch = File(root, "travel-journal-scan.pdf").apply { writeText("x") }
+
+        val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
+
+        assertEquals(listOf(pdfMatch), result)
+    }
+
+    @Test
+    fun `results are ordered by natural sort, not string sort, of file name`() {
+        val root = folder.newFolder()
+        val page1 = File(root, "travel-journal-page1.png").apply { writeText("x") }
+        val page2 = File(root, "travel-journal-page2.png").apply { writeText("x") }
+        val page10 = File(root, "travel-journal-page10.png").apply { writeText("x") }
+
+        val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
+
+        assertEquals(listOf(page1, page2, page10), result)
+    }
+
+    @Test
+    fun `a missing noteRoot yields no exported files`() {
+        val root = File(folder.newFolder(), "does-not-exist")
+
+        val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `a title with no letters or digits yields no exported files`() {
+        val root = folder.newFolder()
+        File(root, "travel-journal-cover.png").apply { writeText("x") }
+
+        val result = onyxNotes(root).exportedFiles(note("!!! --- ..."))
+
+        assertTrue(result.isEmpty())
     }
 }

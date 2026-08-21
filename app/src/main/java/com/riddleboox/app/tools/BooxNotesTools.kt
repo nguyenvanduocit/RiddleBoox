@@ -229,7 +229,10 @@ class OnyxBooxNotes(
         )
     }
 
-    private fun exportedFiles(note: BooxNote): List<File> {
+    // internal (not private) so BooxNotesToolsTest can characterize this BFS's
+    // depth cutoff, dedup, and natural-sort behavior directly; OnyxBooxNotes has
+    // no other seam that exercises it without a real BOOX ContentProvider.
+    internal fun exportedFiles(note: BooxNote): List<File> {
         if (!noteRoot.isDirectory) return emptyList()
         val titleKey = searchKey(note.title)
         if (titleKey.isBlank()) return emptyList()
@@ -239,18 +242,42 @@ class OnyxBooxNotes(
         var visited = 0
         while (queue.isNotEmpty() && visited < MAX_EXPORTED_FILES) {
             val (directory, depth) = queue.removeFirst()
-            val children = directory.listFiles()?.sortedBy { it.name.lowercase(Locale.ROOT) }.orEmpty()
-            for (child in children) {
-                if (++visited >= MAX_EXPORTED_FILES) break
-                if (child.isDirectory && depth < 5) {
-                    queue.add(child to depth + 1)
-                } else if (child.isFile && child.isReadableExport()) {
-                    val relativeKey = searchKey(runCatching { child.relativeTo(noteRoot).path }.getOrDefault(child.name))
-                    if (relativeKey.contains(titleKey)) candidates += child
-                }
-            }
+            visited = visitExportCandidates(directory, depth, titleKey, visited, queue, candidates)
         }
         return candidates.sortedWith(compareBy<File> { naturalKey(it.name) }.thenBy { it.path })
+    }
+
+    /**
+     * Walks one directory's children for [exportedFiles]'s BFS: every child counts
+     * against the shared [MAX_EXPORTED_FILES] visit budget (files and directories
+     * alike, hence the budget check runs before either branch below), matching
+     * subdirectories up to depth 5 are queued for a later visit, and readable files
+     * whose relative path matches [titleKey] are appended to [candidates]. Returns
+     * the updated visited count.
+     */
+    private fun visitExportCandidates(
+        directory: File,
+        depth: Int,
+        titleKey: String,
+        visited: Int,
+        queue: ArrayDeque<Pair<File, Int>>,
+        candidates: MutableList<File>,
+    ): Int {
+        var count = visited
+        val children = directory.listFiles()?.sortedBy { it.name.lowercase(Locale.ROOT) }.orEmpty()
+        for (child in children) {
+            if (++count >= MAX_EXPORTED_FILES) break
+            when {
+                child.isDirectory && depth < 5 -> queue.add(child to depth + 1)
+                child.isFile && child.isReadableExport() && matchesTitle(child, titleKey) -> candidates += child
+            }
+        }
+        return count
+    }
+
+    private fun matchesTitle(file: File, titleKey: String): Boolean {
+        val relativeKey = searchKey(runCatching { file.relativeTo(noteRoot).path }.getOrDefault(file.name))
+        return relativeKey.contains(titleKey)
     }
 
     private fun readTypedShapeText(noteId: String, pageId: String): String {
