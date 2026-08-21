@@ -130,6 +130,17 @@ class EpubTest {
         assertEquals("OEBPS/a b.xhtml", resolve("OEBPS", "a%20b.xhtml#frag"))
     }
 
+    /**
+     * A ".." with nothing left to pop is dropped rather than climbing out of
+     * the book (or throwing) — whether it starts that way or runs out partway
+     * through.
+     */
+    @Test
+    fun `an unmatched dot-dot goes nowhere instead of climbing out`() {
+        assertEquals("a.xhtml", resolve("", "../a.xhtml"))
+        assertEquals("a.xhtml", resolve("OEBPS", "../../a.xhtml"))
+    }
+
     @Test
     fun `the spine leaves out what it marks non-linear`() {
         val opf = """

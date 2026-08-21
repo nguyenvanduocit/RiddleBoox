@@ -238,15 +238,22 @@ internal fun resolve(base: String, href: String): String {
     } else {
         plain
     }
+    val joined = if (base.isEmpty()) decoded else "$base/$decoded"
+    return normalizeSegments(joined).joinToString("/")
+}
+
+/** [path]'s segments with `.`, `..` and empty segments collapsed, shell-`cd`-style. */
+private fun normalizeSegments(path: String): List<String> {
     val parts = ArrayList<String>()
-    for (segment in (if (base.isEmpty()) decoded else "$base/$decoded").split('/')) {
-        when (segment) {
-            "", "." -> Unit
-            ".." -> if (parts.isNotEmpty()) parts.removeAt(parts.size - 1)
+    for (segment in path.split('/')) {
+        when {
+            segment.isEmpty() || segment == "." -> continue
+            segment == ".." && parts.isEmpty() -> continue
+            segment == ".." -> parts.removeAt(parts.size - 1)
             else -> parts.add(segment)
         }
     }
-    return parts.joinToString("/")
+    return parts
 }
 
 /**
