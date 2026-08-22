@@ -15,6 +15,17 @@ class MathChemNotationTest {
     }
 
     @Test
+    fun `a formula's own letters are never subscripted, only its digits`() {
+        // SUBSCRIPT_CHARS maps several lowercase letters now (real LaTeX
+        // subscripts use them) — Na's 'a', Cl's 'l' and Fe's 'e' are all in
+        // that map, and none of the three may be touched by a formula that
+        // happens to contain them.
+        assertEquals("NaCl", mathChemNotation("NaCl"))
+        assertEquals("Fe₂O₃", mathChemNotation("Fe2O3"))
+        assertEquals("NaHCO₃", mathChemNotation("NaHCO3"))
+    }
+
+    @Test
     fun `a formula keeps its place in a sentence`() {
         assertEquals(
             "Công thức của nước là H₂O, đơn giản vậy thôi.",
@@ -136,18 +147,31 @@ class MathChemNotationTest {
     }
 
     @Test
-    fun `the symbol still converts around a subscript that is not a plain digit`() {
-        // \sum's own digit-only super/subscript (\sum_1^n) is already covered
-        // by toSubscript/toSuperscript; \sum_{i=1}^{n} is the documented gap
-        // — the braces stay, but the symbol itself is not lost to it.
-        assertEquals("∑_{i=1}^{n} i", mathChemNotation("""\sum_{i=1}^{n} i"""))
+    fun `a braced subscript and superscript with a variable and an operator both convert`() {
+        // \sum_{i=1}^{n} — a sum's bounds, one of the two real replies that
+        // pushed subscript/superscript past digits-only: 'i' and 'n' have
+        // subscript/superscript Latin forms, '=' has one at each size too.
+        assertEquals("∑ᵢ₌₁ⁿ i", mathChemNotation("""\sum_{i=1}^{n} i"""))
     }
 
     @Test
-    fun `a subscript that is not a plain digit is a documented gap, left alone`() {
-        // \lim_{x \to 0} — the symbol and the arrow inside still convert; the
-        // braced sub-expression itself has no digit-only shape to match.
-        assertEquals("lim_{x → 0} f(x)", mathChemNotation("""\lim_{x \to 0} f(x)"""))
+    fun `a braced subscript keeps a character with no small form at full size`() {
+        // \lim_{x \to 0} — the other real reply. 'x' converts; the arrow
+        // (already → by the time toSubscript runs) and the space around it
+        // have no subscript form, so both stay exactly as written, at full
+        // size, inside the run.
+        assertEquals("limₓ → ₀ f(x)", mathChemNotation("""\lim_{x \to 0} f(x)"""))
+    }
+
+    @Test
+    fun `an unbraced letter subscript or exponent is still a documented gap`() {
+        // x_i and x^n — no braces, so the digit-only bare form doesn't fire
+        // (widening it would also catch snake_case_name's own underscore and
+        // a^b^c's own caret — see SUBSCRIPT_MARK/EXPONENT's own comment).
+        // x_{i} or x^{n}, braced, is what reaches the small form instead —
+        // see the two tests above.
+        assertEquals("x_i", mathChemNotation("x_i"))
+        assertEquals("x^n", mathChemNotation("x^n"))
     }
 
     /**
@@ -216,5 +240,33 @@ class MathChemNotationTest {
         // a fraction; one pass resolves the inner one, the next resolves the
         // outer now that its own denominator has no braces left in it.
         assertEquals("1/(1/2)", mathChemNotation("""\frac{1}{\frac{1}{2}}"""))
+    }
+
+    /**
+     * Verbatim from the device: asked to write several formulas to check
+     * LaTeX rendering, a real reply used `\qquad` five times as a separator
+     * between one formula and the next — every one of them reached the page
+     * as literal backslash-q-q-u-a-d.
+     */
+    @Test
+    fun `qquad and quad become a wide plain-text gap`() {
+        assertEquals("H₂O,      CO₂", mathChemNotation("""H2O, \qquad CO2"""))
+        assertEquals("a    b", mathChemNotation("""a \quad b"""))
+    }
+
+    @Test
+    fun `thin, medium and thick space commands become a single space, a negative one becomes nothing`() {
+        assertEquals("a b", mathChemNotation("""a\,b"""))
+        assertEquals("a b", mathChemNotation("""a\;b"""))
+        assertEquals("a b", mathChemNotation("""a\:b"""))
+        assertEquals("ab", mathChemNotation("""a\!b"""))
+    }
+
+    @Test
+    fun `eulers identity renders with only the characters that have a superscript form raised`() {
+        // e^{i\pi}+1=0 — \pi converts to π first (toSymbols runs before
+        // toSuperscript in one pass); π itself has no superscript glyph in
+        // Unicode, so it stays full-size right after the raised i.
+        assertEquals("eⁱπ+1=0", mathChemNotation("""e^{i\pi}+1=0"""))
     }
 }

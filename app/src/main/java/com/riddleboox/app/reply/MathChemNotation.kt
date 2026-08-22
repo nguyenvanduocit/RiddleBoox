@@ -53,12 +53,21 @@ package com.riddleboox.app.reply
  *    `\sum`, `\Delta`, `\in`, `\sin` and the rest of [SYMBOL_COMMANDS] —
  *    each is one Unicode character or one bare word LaTeX would have
  *    typeset it as anyway.
- *  - **Explicit subscript/superscript** ([toSubscript], [toSuperscript]):
- *    `_2`, `_{12}` and `^2`, `^{-3}` — LaTeX's own markers. Digits (and a
- *    sign) only: `\lim_{x \to 0}`'s subscript is a whole sub-expression, not
- *    a digit run, and Unicode has no general run of subscript letters to
- *    fall back to the way superscript digits do — a real gap, left for
- *    whenever a reply is caught reaching for one.
+ *  - **Spacing commands** (also [stripLatexWrappers]): `\quad`/`\qquad`,
+ *    `\,`/`\;`/`\:`/`\!` measure a fraction of an em, which means nothing on
+ *    a line of ink — each becomes however many plain spaces read as roughly
+ *    that wide, or nothing for `\!`'s negative one. A real reply reached for
+ *    `\qquad` four times on one page, always to separate one formula from
+ *    the next.
+ *  - **Subscript/superscript** ([toSubscript], [toSuperscript]): `_2`,
+ *    `_{12}`, `_{i=1}`, `_x` and their `^` counterparts. Converted one
+ *    character at a time through [SUBSCRIPT_CHARS]/[SUPERSCRIPT_CHARS] —
+ *    Unicode has a small glyph for most digits and roughly half the Latin
+ *    alphabet, not for the rest (no letter `q`, no Greek at either size,
+ *    most capitals), so a character with no small form is kept at full size
+ *    rather than dropped or guessed at: `e^{iπ}` comes out `eⁱπ` — the `i`
+ *    raised, the `π` not — not `eiπ` with the exponent's own shape lost, and
+ *    not `e^{iπ}` with the brace still showing.
  *  - A bare **formula** ([toChemFormulas]), for a reply that skips LaTeX
  *    entirely: a `\b`-bounded word made only of element-symbol fragments —
  *    one capital letter, at most one lowercase, at most three trailing
@@ -101,10 +110,30 @@ private val LEFT_RIGHT = Regex("""\\(?:left|right)(?![a-zA-Z])""")
 private val OPEN_DELIM = Regex("""\\[(\[]\s*""")
 private val CLOSE_DELIM = Regex("""\s*\\[)\]]""")
 
+// LaTeX's own spacing commands, not symbols — \quad/\qquad are the widest
+// (an em and two ems), \,/\;/\: narrower ones, \! a negative thin space. A
+// hand has no em to measure against, so each becomes however many plain
+// spaces read as roughly that wide; \! becomes nothing; a real reply reached
+// for \qquad four times in one page of formulas, always as a separator
+// between one expression and the next.
+// Two patterns, not one: \quad/\qquad are letters, so they need the same
+// boundary [LEFT_RIGHT] does (`\quadrant` is not a real command, but nothing
+// stops a reply from writing one some day). \,/\;/\:/\! are punctuation —
+// LaTeX's own command names are pure letters, so punctuation already ends
+// one wherever it appears, and a boundary check here would only break the
+// single most common case: \, is almost always followed directly by a
+// letter with no space of its own (`\int_0^1 x^2 \,dx`), and (?![a-zA-Z])
+// would refuse to match right there.
+private val WORD_SPACING = Regex("""\\(qquad|quad)(?![a-zA-Z])""")
+private val PUNCT_SPACING = Regex("""\\([,;:!])""")
+private val SPACING_WIDTHS = mapOf("qquad" to "    ", "quad" to "  ", "," to " ", ";" to " ", ":" to " ", "!" to "")
+
 private fun stripLatexWrappers(text: String): String {
     val unwrapped = MATHRM.replace(text) { it.groupValues[1] }
     val sized = LEFT_RIGHT.replace(unwrapped, "")
-    return CLOSE_DELIM.replace(OPEN_DELIM.replace(sized, ""), "")
+    val spacedWords = WORD_SPACING.replace(sized) { match -> SPACING_WIDTHS.getValue(match.groupValues[1]) }
+    val spaced = PUNCT_SPACING.replace(spacedWords) { match -> SPACING_WIDTHS.getValue(match.groupValues[1]) }
+    return CLOSE_DELIM.replace(OPEN_DELIM.replace(spaced, ""), "")
 }
 
 private val FRAC = Regex("""\\frac\{([^{}]*)\}\{([^{}]*)\}""")
@@ -185,23 +214,47 @@ private fun toSymbols(text: String): String = SYMBOL_COMMAND.replace(text) { mat
     SYMBOL_COMMANDS.getValue(match.groupValues[1])
 }
 
-private val SUBSCRIPT_MARK = Regex("""_(?:\{([+-]?\d+)\}|([+-]?\d))""")
-private val EXPONENT = Regex("""\^(?:\{([+-]?\d+)\}|([+-]?\d+))""")
+// The braced form takes whatever content a fraction's own numerator does
+// (anything but another brace — see [toFractions]) — `\lim_{x \to 0}` and
+// `\sum_{i=1}^{n}` are real replies that reached for a variable and an
+// equals sign in a subscript, not just a number. The bare form stays
+// digit-only, same as it always was: widening it to any character would
+// also catch `snake_case_name`'s `_c` and `a^b^c`'s `^b` — real, already
+// covered cases where the mark is not LaTeX at all, just a name or a caret
+// with no arithmetic meaning. A letter subscript with no braces around it
+// (`x_i` rather than `x_{i}`) is the gap that leaves; still readable as
+// plain text, unlike a stray backslash or brace.
+private val SUBSCRIPT_MARK = Regex("""_(?:\{([^{}]*)\}|([+-]?\d))""")
+private val EXPONENT = Regex("""\^(?:\{([^{}]*)\}|([+-]?\d+))""")
 
-private val SUBSCRIPT_DIGITS = mapOf(
+/**
+ * Unicode's own small forms — not every character has one. A subscript `b`
+ * or a superscript `q` has no dedicated glyph to reach for, so it is left at
+ * full size rather than dropped or guessed at: `a_b` reads as `a_b` with the
+ * mark gone and both characters kept, not as `ab` with one silently lost.
+ */
+private val SUBSCRIPT_CHARS = mapOf(
     '0' to '₀', '1' to '₁', '2' to '₂', '3' to '₃', '4' to '₄',
     '5' to '₅', '6' to '₆', '7' to '₇', '8' to '₈', '9' to '₉',
-    '+' to '₊', '-' to '₋',
+    '+' to '₊', '-' to '₋', '=' to '₌', '(' to '₍', ')' to '₎',
+    'a' to 'ₐ', 'e' to 'ₑ', 'h' to 'ₕ', 'i' to 'ᵢ', 'j' to 'ⱼ', 'k' to 'ₖ',
+    'l' to 'ₗ', 'm' to 'ₘ', 'n' to 'ₙ', 'o' to 'ₒ', 'p' to 'ₚ', 'r' to 'ᵣ',
+    's' to 'ₛ', 't' to 'ₜ', 'u' to 'ᵤ', 'v' to 'ᵥ', 'x' to 'ₓ',
 )
 
 private val SUPERSCRIPT_CHARS = mapOf(
     '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴',
     '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
-    '+' to '⁺', '-' to '⁻',
+    '+' to '⁺', '-' to '⁻', '=' to '⁼', '(' to '⁽', ')' to '⁾',
+    'a' to 'ᵃ', 'b' to 'ᵇ', 'c' to 'ᶜ', 'd' to 'ᵈ', 'e' to 'ᵉ', 'f' to 'ᶠ',
+    'g' to 'ᵍ', 'h' to 'ʰ', 'i' to 'ⁱ', 'j' to 'ʲ', 'k' to 'ᵏ', 'l' to 'ˡ',
+    'm' to 'ᵐ', 'n' to 'ⁿ', 'o' to 'ᵒ', 'p' to 'ᵖ', 'r' to 'ʳ', 's' to 'ˢ',
+    't' to 'ᵗ', 'u' to 'ᵘ', 'v' to 'ᵛ', 'w' to 'ʷ', 'x' to 'ˣ', 'y' to 'ʸ',
+    'z' to 'ᶻ',
 )
 
 private fun toSubscript(text: String): String = SUBSCRIPT_MARK.replace(text) { match ->
-    (match.groupValues[1].ifEmpty { match.groupValues[2] }).map { SUBSCRIPT_DIGITS[it] ?: it }.joinToString("")
+    (match.groupValues[1].ifEmpty { match.groupValues[2] }).map { SUBSCRIPT_CHARS[it] ?: it }.joinToString("")
 }
 
 private fun toSuperscript(text: String): String = EXPONENT.replace(text) { match ->
@@ -212,5 +265,9 @@ private val FORMULA = Regex("""\b(?:[A-Z][a-z]?\d{0,3})+\b""")
 
 private fun toChemFormulas(text: String): String = FORMULA.replace(text) { match ->
     val token = match.value
-    if (token.none(Char::isDigit)) token else token.map { SUBSCRIPT_DIGITS[it] ?: it }.joinToString("")
+    // Only the digits, never a letter: [SUBSCRIPT_CHARS] now also maps
+    // several lowercase Latin letters (subscript variables are real LaTeX),
+    // and running it over the whole token would subscript the element
+    // symbols themselves — "Na" has a mapped 'a', "Cl" has a mapped 'l'.
+    if (token.none(Char::isDigit)) token else token.map { if (it.isDigit()) SUBSCRIPT_CHARS[it] ?: it else it }.joinToString("")
 }
