@@ -13,6 +13,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.FileProvider
+import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
@@ -56,6 +57,7 @@ class HistoryActivity : Activity() {
 
         store = ConversationStore(this)
         agentId = intent.getStringExtra(EXTRA_AGENT_ID).orEmpty().ifBlank { "chat" }
+        val agentName = AgentStore(this).load(agentId)?.name
         column = textBlock()
         searchField = searchField()
         val body = LinearLayout(this).apply {
@@ -66,7 +68,8 @@ class HistoryActivity : Activity() {
             )
             addView(column)
         }
-        setContentView(paperPage(runningHead("lịch sử", "xuất tất cả", onAction = { exportAll() }), body))
+        val title = if (agentName != null) "$agentName · lịch sử" else "lịch sử"
+        setContentView(paperPage(runningHead(title, "xuất tất cả", onAction = { exportAll() }), body))
     }
 
     override fun onResume() {
