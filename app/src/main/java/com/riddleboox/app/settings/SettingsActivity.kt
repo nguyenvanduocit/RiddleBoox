@@ -349,7 +349,47 @@ class SettingsActivity : Activity() {
             .setTitle("đặt mã PIN")
             .setView(input)
             .setNegativeButton("thôi", null)
-            .setPositiveButton("đặt") { _, _ -> trySetPin(input.text.toString()) }
+            .setPositiveButton("đặt") { _, _ ->
+                val pin = input.text.toString()
+                if (isValidPin(pin)) {
+                    promptConfirmPin(pin)
+                } else {
+                    AlertDialog.Builder(this)
+                        .setMessage("PIN cần ít nhất 4 chữ số")
+                        .setPositiveButton("thôi", null)
+                        .show()
+                }
+            }
+            .show()
+    }
+
+    /**
+     * A second, independent entry — not a review of the first — because
+     * [TYPE_NUMBER_VARIATION_PASSWORD] masks every digit as it's typed, so a
+     * writer who fat-fingers one digit in [promptSetPin] has no way to see
+     * and catch it there. Only a matching re-entry reaches [setPin]; a
+     * mismatch cancels outright rather than looping back into
+     * [promptSetPin], leaving the writer to tap "đặt mã PIN" again if they
+     * want another attempt.
+     */
+    private fun promptConfirmPin(pin: String) {
+        val confirmInput = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        }
+        AlertDialog.Builder(this)
+            .setTitle("nhập lại mã PIN")
+            .setView(confirmInput)
+            .setNegativeButton("thôi", null)
+            .setPositiveButton("xác nhận") { _, _ ->
+                if (confirmInput.text.toString() == pin) {
+                    setPin(pin)
+                } else {
+                    AlertDialog.Builder(this)
+                        .setMessage("Hai lần nhập không khớp")
+                        .setPositiveButton("thôi", null)
+                        .show()
+                }
+            }
             .show()
     }
 
@@ -358,14 +398,9 @@ class SettingsActivity : Activity() {
      * handed a 2-digit or empty PIN and silently accept it is how a writer
      * ends up locked out by a PIN they mistyped once and never actually set.
      */
-    private fun trySetPin(pin: String) {
-        if (pin.length < 4 || !pin.all { it.isDigit() }) {
-            AlertDialog.Builder(this)
-                .setMessage("PIN cần ít nhất 4 chữ số")
-                .setPositiveButton("thôi", null)
-                .show()
-            return
-        }
+    private fun isValidPin(pin: String): Boolean = pin.length >= 4 && pin.all { it.isDigit() }
+
+    private fun setPin(pin: String) {
         pinStore.set(pin)
         pinField.text = pinFieldLabel()
     }
