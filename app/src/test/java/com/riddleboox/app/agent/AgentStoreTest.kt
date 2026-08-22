@@ -29,7 +29,13 @@ class AgentStoreTest {
         assertTrue(AgentCapability.BOOX_NOTES in notes.toolIds)
         assertTrue(notes.greetings.size >= 5)
         assertNotEquals(store.load("chat")!!.greetings.toSet(), notes.greetings.toSet())
-        assertEquals(4, store.list().size)
+
+        val tutor = store.load("english-tutor")!!
+        assertTrue(tutor.builtin)
+        assertTrue(tutor.systemPrompt.contains("recall_memories"))
+        assertEquals(setOf(AgentCapability.WORKSPACE), tutor.toolIds)
+
+        assertEquals(5, store.list().size)
     }
 
     /**
@@ -48,7 +54,7 @@ class AgentStoreTest {
 
         val reseeded = store.load("library")!!
         assertTrue(reseeded.systemPrompt.isNotBlank())
-        assertEquals(4, store.list().size)
+        assertEquals(5, store.list().size)
     }
 
     @Test
