@@ -213,7 +213,34 @@ class SettingsActivity : Activity() {
         libraryField.setOnClickListener(where?.let { screen -> View.OnClickListener { startActivity(screen) } })
     }
 
+    /**
+     * Gate before [writeAndFinish], not a correction of it: a base URL that
+     * already ends in `/v1` makes koog double it up into
+     * `.../v1/v1/chat/completions`, a 404 with no body and no other symptom —
+     * see README's "Base URL là gốc server, không kèm `/v1`". Some self-hosted
+     * proxies genuinely want `/v1` at the root, so this only asks; it never
+     * rewrites the field.
+     */
     private fun save() {
+        if (looksLikeItHasTrailingV1(baseUrlField.text.toString())) {
+            AlertDialog.Builder(this)
+                .setMessage(
+                    "Base URL này có vẻ kèm sẵn \"/v1\" ở cuối — có thể khiến mọi " +
+                        "yêu cầu tới API bị lỗi 404 âm thầm (xem README). Vẫn lưu?",
+                )
+                .setNegativeButton("sửa lại", null)
+                .setPositiveButton("vẫn lưu") { _, _ -> writeAndFinish() }
+                .show()
+            return
+        }
+        writeAndFinish()
+    }
+
+    /** True for `.../v1` and `.../v1/`, case-insensitively — see [save]. */
+    private fun looksLikeItHasTrailingV1(url: String): Boolean =
+        url.trim().trimEnd('/').endsWith("/v1", ignoreCase = true)
+
+    private fun writeAndFinish() {
         store.write(
             ReplySettings(
                 baseUrl = baseUrlField.text.toString(),
