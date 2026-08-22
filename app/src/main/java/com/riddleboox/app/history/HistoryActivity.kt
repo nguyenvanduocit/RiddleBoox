@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.FileProvider
 import com.riddleboox.app.agent.AgentStore
+import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
@@ -59,11 +60,11 @@ class HistoryActivity : Activity() {
         agentId = intent.getStringExtra(EXTRA_AGENT_ID).orEmpty().ifBlank { "chat" }
         val agentName = AgentStore(this).load(agentId)?.name
         column = textBlock()
-        searchField = searchField()
+        val searchRow = searchRow()
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(
-                searchField,
+                searchRow,
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT),
             )
             addView(column)
@@ -79,32 +80,51 @@ class HistoryActivity : Activity() {
     }
 
     /**
-     * The search box itself: kept out of [column] so [show]'s `removeAllViews`
+     * The search row itself: kept out of [column] so [show]'s `removeAllViews`
      * never touches it, sitting above the entries it narrows.
      *
-     * Same input-field styling as [com.riddleboox.app.settings.LockActivity]'s
-     * PIN field — transparent background, black text, no border — this app has
-     * no chrome for input fields beyond that. Carries its own left/right inset
-     * ([dp]`(48)`, matching [textBlock]'s) because it sits beside [column] in
-     * `body` rather than inside it, so it has no padded parent to inherit that
-     * inset from.
+     * [searchField] carries the same input styling as
+     * [com.riddleboox.app.settings.LockActivity]'s PIN field — transparent
+     * background, black text, no border — this app has no chrome for input
+     * fields beyond that. The row carries the left/right inset ([dp]`(48)`,
+     * matching [textBlock]'s) because it sits beside [column] in `body` rather
+     * than inside it, so it has no padded parent to inherit that inset from.
+     *
+     * Beside the field, a "xoá" caption that only shows once there's a query to
+     * clear — tapping it empties [searchField], which re-fires the
+     * [TextWatcher] below and puts the row back to its resting, buttonless
+     * state on its own; no extra code needed to hide it again.
      */
-    private fun searchField(): EditText = EditText(this).apply {
-        hint = "tìm trong lịch sử"
-        setSingleLine()
-        textSize = 17f
-        setTextColor(Color.BLACK)
-        setBackgroundColor(Color.TRANSPARENT)
-        setPadding(dp(48), dp(24), dp(48), dp(8))
-        addTextChangedListener(
-            object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-                override fun afterTextChanged(s: Editable?) {
-                    show(allConversations.matching(s?.toString().orEmpty()))
-                }
-            },
-        )
+    private fun searchRow(): LinearLayout {
+        val clearAction = caption("xoá").apply {
+            visibility = View.GONE
+            setPadding(dp(12), dp(24), dp(48), dp(8))
+            setOnClickListener { searchField.text?.clear() }
+        }
+        searchField = EditText(this).apply {
+            hint = "tìm trong lịch sử"
+            setSingleLine()
+            textSize = 17f
+            setTextColor(Color.BLACK)
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(48), dp(24), dp(12), dp(8))
+            addTextChangedListener(
+                object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                    override fun afterTextChanged(s: Editable?) {
+                        val query = s?.toString().orEmpty()
+                        clearAction.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+                        show(allConversations.matching(query))
+                    }
+                },
+            )
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(searchField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(clearAction)
+        }
     }
 
     private fun show(conversations: List<StoredConversation>) {
