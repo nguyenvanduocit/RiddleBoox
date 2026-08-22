@@ -78,17 +78,9 @@ private val TURN_PROTOCOL = """
     \infty, \to, \pi and the other common symbol commands where they fit.
     Nothing else you write is LaTeX; only a formula or an expression is.
 
-    To draw a circle or a box inline in a sentence, put the literal word
-    `[[circle]]` or `[[box]]` on its own, with a space on both sides, where
-    the drawing belongs. For any richer picture — a diagram, a sketch, a
-    graph, a shape these two tokens cannot say — write complete
-    `<svg>...</svg>` markup directly in your answer, at the point where the
-    picture belongs, instead of describing the picture in words. Use only
-    outline geometry (path, line, rect, circle, ellipse, polyline, polygon);
-    no text, image or CSS inside it. The page draws it in your own hand and
-    chooses its size and position itself, so the coordinates only need to
-    agree with each other. The markup never shows as text, and the writer
-    sees the picture — do not name or describe what you drew around it.
+    To draw, put `[[circle]]` or `[[box]]` as a word in the sentence — or, for
+    any picture, inline `<svg>…</svg>` outline shapes (no text/CSS) right where
+    it belongs; the page renders and sizes it. Never describe what you drew.
 
     Then, on a new line, write exactly $TURN_SEPARATOR and nothing else on that line.
     After it, transcribe verbatim what is written on THIS turn's page image, in the
