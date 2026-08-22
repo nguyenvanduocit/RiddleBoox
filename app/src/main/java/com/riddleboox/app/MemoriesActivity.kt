@@ -2,6 +2,8 @@ package com.riddleboox.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -14,6 +16,7 @@ import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.tools.MemoryEntry
 import com.riddleboox.app.tools.matching
@@ -190,7 +193,14 @@ class MemoriesActivity : Activity() {
             .setMessage(entry.content)
             .setPositiveButton("được", null)
             .setNegativeButton("quên đi") { _, _ -> confirmForget(entry) }
+            .setNeutralButton("sao chép") { _, _ -> copy(entry) }
             .show()
+    }
+
+    private fun copy(entry: MemoryEntry) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("điều đã nhớ", entry.content))
+        Toast.makeText(this, "Đã sao chép", Toast.LENGTH_SHORT).show()
     }
 
     /**
