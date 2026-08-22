@@ -4,25 +4,26 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.FileProvider
 import com.riddleboox.app.BuildConfig
+import com.riddleboox.app.agent.AgentStore
+import com.riddleboox.app.backup.wholeDiaryBackup
+import com.riddleboox.app.history.ConversationStore
 import com.riddleboox.app.library.allFilesAccess
 import com.riddleboox.app.library.canOpenBooks
 import com.riddleboox.app.reply.VisionModel
 import com.riddleboox.app.reply.modelChoices
-import com.riddleboox.app.ui.caption
-import com.riddleboox.app.ui.dp
+import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
 import com.riddleboox.app.ui.textBlock
+import java.io.File
 
 /**
  * The one screen where the diary is configured rather than written in. Same
@@ -33,33 +34,29 @@ import com.riddleboox.app.ui.textBlock
  * and leaves. Defaults arrive as intent extras rather than reading
  * `BuildConfig` directly — see [intent] — except for the version line at the
  * bottom of the page, which is read-only display with no default to override.
+ *
+ * Every row on the page is one of three shapes: a plain text field (base
+ * url, api key — read straight off the [EditText] in [writeAndFinish]), a
+ * preset picked from a short list (model, plus everything wrapped in
+ * [EnumSettingRow]), or a self-contained toggle that writes through its own
+ * store immediately ([PinField]) rather than waiting for "lưu". [dirty] and
+ * [writeAndFinish] only ever need to know about the first two.
  */
 class SettingsActivity : Activity() {
 
     private lateinit var store: SettingsStore
-    private lateinit var fontSizeStore: ReplyFontSizeStore
-    private lateinit var transcriptFontSizeStore: TranscriptFontSizeStore
-    private lateinit var sendModeStore: SendModeStore
     private lateinit var defaults: ReplySettings
 
     /** What was on the page when it opened — the thing [dirty] compares against. */
     private lateinit var loaded: ReplySettings
-    private var loadedFontSize: ReplyFontSize = ReplyFontSize.Default
-    private var loadedTranscriptFontSize: TranscriptFontSize = TranscriptFontSize.Default
-    private var loadedSendMode: SendMode = SendMode.Auto
     private lateinit var baseUrlField: EditText
     private lateinit var apiKeyField: EditText
     private lateinit var modelField: TextView
-    private lateinit var fontSizeField: TextView
-    private lateinit var transcriptFontSizeField: TextView
-    private lateinit var sendModeField: TextView
     private lateinit var libraryField: TextView
-    private lateinit var pinStore: PinStore
-    private lateinit var pinField: TextView
     private var chosenModel: String = ""
-    private var chosenFontSize: ReplyFontSize = ReplyFontSize.Default
-    private var chosenTranscriptFontSize: TranscriptFontSize = TranscriptFontSize.Default
-    private var chosenSendMode: SendMode = SendMode.Auto
+
+    /** cỡ chữ trả lời, cỡ chữ đọc lại, chế độ gửi — see [EnumSettingRow]. */
+    private lateinit var enumRows: List<EnumSettingRow<*>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,31 +85,41 @@ class SettingsActivity : Activity() {
         chosenModel = current.model
         modelField = chooserField(current.model) { pickModel() }
 
-        fontSizeStore = ReplyFontSizeStore(this)
-        val currentFontSize = fontSizeStore.read()
-        loadedFontSize = currentFontSize
-        chosenFontSize = currentFontSize
-        fontSizeField = chooserField(currentFontSize.label) { pickFontSize() }
-
-        transcriptFontSizeStore = TranscriptFontSizeStore(this)
-        val currentTranscriptFontSize = transcriptFontSizeStore.read()
-        loadedTranscriptFontSize = currentTranscriptFontSize
-        chosenTranscriptFontSize = currentTranscriptFontSize
-        transcriptFontSizeField = chooserField(currentTranscriptFontSize.label) { pickTranscriptFontSize() }
-
-        sendModeStore = SendModeStore(this)
-        val currentSendMode = sendModeStore.read()
-        loadedSendMode = currentSendMode
-        chosenSendMode = currentSendMode
-        sendModeField = chooserField(currentSendMode.label) { pickSendMode() }
+        val fontSizeStore = ReplyFontSizeStore(this)
+        val fontSizeRow = EnumSettingRow(
+            activity = this,
+            entries = ReplyFontSize.entries,
+            labelOf = ReplyFontSize::label,
+            dialogTitle = "cỡ chữ",
+            read = fontSizeStore::read,
+            write = fontSizeStore::write,
+        )
+        val transcriptFontSizeStore = TranscriptFontSizeStore(this)
+        val transcriptFontSizeRow = EnumSettingRow(
+            activity = this,
+            entries = TranscriptFontSize.entries,
+            labelOf = TranscriptFontSize::label,
+            dialogTitle = "cỡ chữ đọc lại",
+            read = transcriptFontSizeStore::read,
+            write = transcriptFontSizeStore::write,
+        )
+        val sendModeStore = SendModeStore(this)
+        val sendModeRow = EnumSettingRow(
+            activity = this,
+            entries = SendMode.entries,
+            labelOf = SendMode::label,
+            dialogTitle = "chế độ gửi",
+            read = sendModeStore::read,
+            write = sendModeStore::write,
+        )
+        enumRows = listOf(fontSizeRow, transcriptFontSizeRow, sendModeRow)
 
         val onboardingStore = OnboardingStore(this)
-
-        pinStore = PinStore(this)
-        pinField = chooserField(pinFieldLabel()) { togglePin() }
+        val pinField = PinField(this)
 
         libraryField = statusField()
         val column = textBlock().apply {
+            addView(sectionHeader("kết nối"))
             addView(field("base url", baseUrlField))
             addView(field("api key", apiKeyField))
             addView(field("model", modelField))
@@ -126,10 +133,14 @@ class SettingsActivity : Activity() {
                     chooserField("chạm để khôi phục") { resetConnectionDefaults() },
                 ),
             )
-            addView(field("cỡ chữ trả lời", fontSizeField))
-            addView(field("cỡ chữ đọc lại", transcriptFontSizeField))
-            addView(field("chế độ gửi", sendModeField))
+
+            addView(sectionHeader("đọc & viết"))
+            addView(field("cỡ chữ trả lời", fontSizeRow.field))
+            addView(field("cỡ chữ đọc lại", transcriptFontSizeRow.field))
+            addView(field("chế độ gửi", sendModeRow.field))
             addView(field("sách trên máy", libraryField))
+
+            addView(sectionHeader("bảo mật & thông tin"))
             // Không tự finish() ở đây — gọi lại save() để không đánh mất các
             // field khác đang sửa dở trên cùng màn hình. save() lưu luôn mọi
             // field khác trên màn hình này (base url, api key, model, cỡ chữ
@@ -139,12 +150,14 @@ class SettingsActivity : Activity() {
                 onboardingStore.write(false)
                 save()
             }))
-            // Không đưa vào dirty()/save(): bật/tắt PIN ghi thẳng qua PinStore
+            // Không đưa vào dirty()/save(): PinField ghi thẳng qua PinStore
             // ngay khi chạm, không phải state chờ nút "lưu" ở đầu trang — một
             // PIN vừa đặt mà "bỏ những thay đổi chưa lưu?" xoá mất là khoá giả.
-            // Chu kỳ này chỉ dựng chỗ đặt/xoá PIN; màn hình khoá thật đọc
-            // PinStore.verify() là việc của chu kỳ sau, chưa nối ở đây.
-            addView(field("khoá bằng mã PIN", pinField))
+            addView(field("khoá bằng mã PIN", pinField.field))
+            // Đọc, ghi ra một file rồi mở share sheet ngay khi chạm — không có
+            // gì để "lưu" hay "bỏ", nên cũng đứng ngoài dirty()/save() như
+            // "giới thiệu" và "khoá bằng mã PIN" ở trên.
+            addView(field("sao lưu toàn bộ dữ liệu", chooserField("chạm để xuất") { backupAll() }))
             // Đọc-chỉ-đọc, không thuộc dirty()/save(): chỉ để nhận dạng bản
             // build khi cần hỗ trợ ("bạn đang dùng bản nào?"), không phải một
             // setting có thể đổi.
@@ -188,9 +201,7 @@ class SettingsActivity : Activity() {
         baseUrlField.text.toString() != loaded.baseUrl ||
             apiKeyField.text.toString() != loaded.apiKey ||
             chosenModel != loaded.model ||
-            chosenFontSize != loadedFontSize ||
-            chosenTranscriptFontSize != loadedTranscriptFontSize ||
-            chosenSendMode != loadedSendMode
+            enumRows.any { it.dirty }
 
     /**
      * Whatever produced the back gesture, leaving costs the same question:
@@ -266,9 +277,7 @@ class SettingsActivity : Activity() {
                 model = chosenModel,
             ).sanitized(defaults),
         )
-        fontSizeStore.write(chosenFontSize)
-        transcriptFontSizeStore.write(chosenTranscriptFontSize)
-        sendModeStore.write(chosenSendMode)
+        enumRows.forEach { it.save() }
         setResult(RESULT_OK)
         finish()
     }
@@ -282,6 +291,12 @@ class SettingsActivity : Activity() {
      * The neutral button opens [promptCustomModel] for the one case the
      * shortlist can't cover — a model too new to have been added yet, or a
      * self-hosted one.
+     *
+     * Not an [EnumSettingRow]: the shortlist's labels are composed from two
+     * fields (`label` + `note`) rather than one, matching is by id rather
+     * than equality, and the neutral "nhập tay…" escape hatch has no
+     * equivalent in a preset list — three differences, not a preset picker
+     * with different words.
      */
     private fun pickModel() {
         val choices = modelChoices(chosenModel)
@@ -346,195 +361,29 @@ class SettingsActivity : Activity() {
     }
 
     /**
-     * Presets, not a raw number: a hand-typed pixel value on a stylus tablet
-     * is how a working setup turns into unreadable ink or a page that holds
-     * three words.
+     * The one export that reaches every agent at once — see
+     * [wholeDiaryBackup]. Re-reads every store fresh rather than anything
+     * cached on this screen, the same reason
+     * [com.riddleboox.app.history.HistoryActivity.exportAll] does: a backup
+     * is meant to be what's on disk right now.
      */
-    private fun pickFontSize() {
-        val choices = ReplyFontSize.entries
-        val labels = choices.map { it.label }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("cỡ chữ")
-            .setSingleChoiceItems(labels, choices.indexOf(chosenFontSize)) { dialog, which ->
-                chosenFontSize = choices[which]
-                fontSizeField.text = chosenFontSize.label
-                dialog.dismiss()
-            }
-            .show()
-    }
+    private fun backupAll() {
+        val agents = AgentStore(this).list()
+        val conversations = ConversationStore(this).list()
+        val memories = agents.associate { it.id to readMemories(it.workspace) }
+        val text = wholeDiaryBackup(agents, conversations, memories, exportedAtMs = System.currentTimeMillis())
 
-    /**
-     * Presets for the read-back screen, independent of [pickFontSize]: that
-     * one sizes rasterized ink in px, this one sizes a plain `TextView` in sp.
-     */
-    private fun pickTranscriptFontSize() {
-        val choices = TranscriptFontSize.entries
-        val labels = choices.map { it.label }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("cỡ chữ đọc lại")
-            .setSingleChoiceItems(labels, choices.indexOf(chosenTranscriptFontSize)) { dialog, which ->
-                chosenTranscriptFontSize = choices[which]
-                transcriptFontSizeField.text = chosenTranscriptFontSize.label
-                dialog.dismiss()
-            }
-            .show()
-    }
+        val exportsDir = File(cacheDir, "exports").apply { mkdirs() }
+        val file = File(exportsDir, "riddlebox-backup.txt")
+        file.writeText(text)
 
-    /**
-     * Who decides a page is finished — see [SendMode]. Auto or manual, not a
-     * raw toggle on the page's own chrome: the choice is made rarely, here,
-     * and read once when the diary opens rather than tapped mid-write.
-     */
-    private fun pickSendMode() {
-        val choices = SendMode.entries
-        val labels = choices.map { it.label }.toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("chế độ gửi")
-            .setSingleChoiceItems(labels, choices.indexOf(chosenSendMode)) { dialog, which ->
-                chosenSendMode = choices[which]
-                sendModeField.text = chosenSendMode.label
-                dialog.dismiss()
-            }
-            .show()
-    }
-
-    private fun pinFieldLabel(): String = if (pinStore.isSet()) "đã bật" else "chưa đặt"
-
-    /** Only two states matter to the tap: nothing set yet, or something to turn back off. */
-    private fun togglePin() {
-        if (pinStore.isSet()) confirmDisablePin() else promptSetPin()
-    }
-
-    private fun promptSetPin() {
-        val input = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        val uri = FileProvider.getUriForFile(this, "$packageName.onyx.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        AlertDialog.Builder(this)
-            .setTitle("đặt mã PIN")
-            .setView(input)
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("đặt") { _, _ ->
-                val pin = input.text.toString()
-                if (isValidPin(pin)) {
-                    promptConfirmPin(pin)
-                } else {
-                    AlertDialog.Builder(this)
-                        .setMessage("PIN cần ít nhất 4 chữ số")
-                        .setPositiveButton("thôi", null)
-                        .show()
-                }
-            }
-            .show()
-    }
-
-    /**
-     * A second, independent entry — not a review of the first — because
-     * [TYPE_NUMBER_VARIATION_PASSWORD] masks every digit as it's typed, so a
-     * writer who fat-fingers one digit in [promptSetPin] has no way to see
-     * and catch it there. Only a matching re-entry reaches [setPin]; a
-     * mismatch cancels outright rather than looping back into
-     * [promptSetPin], leaving the writer to tap "đặt mã PIN" again if they
-     * want another attempt.
-     */
-    private fun promptConfirmPin(pin: String) {
-        val confirmInput = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-        }
-        AlertDialog.Builder(this)
-            .setTitle("nhập lại mã PIN")
-            .setView(confirmInput)
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("xác nhận") { _, _ ->
-                if (confirmInput.text.toString() == pin) {
-                    setPin(pin)
-                } else {
-                    AlertDialog.Builder(this)
-                        .setMessage("Hai lần nhập không khớp")
-                        .setPositiveButton("thôi", null)
-                        .show()
-                }
-            }
-            .show()
-    }
-
-    /**
-     * Validated here rather than left to [PinStore.set]: a store that can be
-     * handed a 2-digit or empty PIN and silently accept it is how a writer
-     * ends up locked out by a PIN they mistyped once and never actually set.
-     */
-    private fun isValidPin(pin: String): Boolean = pin.length >= 4 && pin.all { it.isDigit() }
-
-    private fun setPin(pin: String) {
-        pinStore.set(pin)
-        pinField.text = pinFieldLabel()
-    }
-
-    private fun confirmDisablePin() {
-        AlertDialog.Builder(this)
-            .setMessage("Tắt khoá PIN?")
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("tắt") { _, _ ->
-                pinStore.clear()
-                pinField.text = pinFieldLabel()
-            }
-            .show()
-    }
-
-    /** A label above its input, closed by the hairline the text sits on. */
-    private fun field(label: String, input: View): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(0, dp(32), 0, 0)
-        addView(caption(label))
-        addView(
-            input,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ),
-        )
-        addView(
-            View(this@SettingsActivity).apply { setBackgroundColor(Color.BLACK) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)),
-        )
-    }
-
-    /**
-     * A line of prose where the other fields hold a value: it wraps, and it is
-     * set in the page's own face rather than the monospace the other three
-     * use, because nobody proofreads it for a mistyped character.
-     */
-    private fun statusField(): TextView = TextView(this).apply {
-        textSize = 18f
-        setTextColor(Color.BLACK)
-        setPadding(0, dp(8), 0, dp(8))
-        setLineSpacing(dp(3).toFloat(), 1f)
-    }
-
-    /** Reads like the fields around it, but opens a list instead of a keyboard. */
-    private fun chooserField(value: String, onTap: () -> Unit): TextView = TextView(this).apply {
-        text = value
-        setSingleLine()
-        textSize = 17f
-        typeface = Typeface.MONOSPACE
-        setTextColor(Color.BLACK)
-        setPadding(0, dp(8), 0, dp(8))
-        setOnClickListener { onTap() }
-    }
-
-    /**
-     * Monospace, because these are the three strings a typo silently turns
-     * into a 401: an `l` has to look unlike a `1` while proofreading a pasted
-     * key.
-     */
-    private fun valueField(value: String, inputType: Int): EditText = EditText(this).apply {
-        setText(value)
-        setSingleLine()
-        this.inputType = inputType
-        textSize = 17f
-        typeface = Typeface.MONOSPACE
-        setTextColor(Color.BLACK)
-        setBackgroundColor(Color.TRANSPARENT)
-        setPadding(0, dp(8), 0, dp(8))
+        startActivity(Intent.createChooser(intent, "Chia sẻ toàn bộ dữ liệu"))
     }
 
     companion object {
