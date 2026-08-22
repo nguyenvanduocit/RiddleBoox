@@ -7,12 +7,16 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.Editable
 import android.text.TextUtils
+import android.text.TextWatcher
 import android.view.View
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.tools.MemoryEntry
+import com.riddleboox.app.tools.matching
 import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.tools.writeMemories
 import com.riddleboox.app.ui.caption
@@ -49,14 +53,25 @@ import java.util.Locale
  * [workspace], kept only so a delete doesn't need to reload the agent: the
  * writer reaches this only from the agents screen, and it is never open while
  * the diary itself could be writing to the same file.
+ *
+ * Carries a search box above the list, the same shape as
+ * [com.riddleboox.app.history.HistoryActivity]'s: [allEntries] holds what
+ * [onResume] last read, unnarrowed, and [searchField] filters it in memory
+ * on every keystroke via [com.riddleboox.app.tools.matching] rather than
+ * re-reading the store — a memory list grows the same way a history does,
+ * and deserves the same way back to one entry in it.
  */
 class MemoriesActivity : Activity() {
 
     private lateinit var agentStore: AgentStore
     private lateinit var column: LinearLayout
+    private lateinit var searchField: EditText
     private var agentId: String = ""
     private var agentName: String = ""
     private var workspace: File? = null
+
+    /** [agentId]'s memories as [onResume] last read them, unnarrowed by [searchField]. */
+    private var allEntries: List<MemoryEntry> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,14 +80,52 @@ class MemoriesActivity : Activity() {
         agentId = intent.getStringExtra(EXTRA_AGENT_ID).orEmpty()
         agentName = intent.getStringExtra(EXTRA_AGENT_NAME).orEmpty()
         column = textBlock()
-        setContentView(paperPage(runningHead("$agentName · đã nhớ"), column))
+        searchField = searchField()
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                searchField,
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT),
+            )
+            addView(column)
+        }
+        setContentView(paperPage(runningHead("$agentName · đã nhớ"), body))
     }
 
     override fun onResume() {
         super.onResume()
         val agent = agentStore.load(agentId)
         workspace = agent?.workspace
-        show(loadEntries())
+        allEntries = loadEntries()
+        show(allEntries.matching(searchField.text?.toString().orEmpty()))
+    }
+
+    /**
+     * The search box itself: kept out of [column] so [show]'s `removeAllViews`
+     * never touches it, sitting above the entries it narrows.
+     *
+     * Same input-field styling as [com.riddleboox.app.history.HistoryActivity]'s
+     * `searchField` — transparent background, black text, no border, the
+     * same [dp]`(48)` left/right inset since it sits beside [column] in
+     * `body` rather than inside it, so it has no padded parent to inherit
+     * that inset from.
+     */
+    private fun searchField(): EditText = EditText(this).apply {
+        hint = "tìm trong đã nhớ"
+        setSingleLine()
+        textSize = 17f
+        setTextColor(Color.BLACK)
+        setBackgroundColor(Color.TRANSPARENT)
+        setPadding(dp(48), dp(24), dp(48), dp(8))
+        addTextChangedListener(
+            object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    show(allEntries.matching(s?.toString().orEmpty()))
+                }
+            },
+        )
     }
 
     private fun loadEntries(): List<MemoryEntry> {
@@ -155,7 +208,8 @@ class MemoriesActivity : Activity() {
     private fun forget(entry: MemoryEntry) {
         val ws = workspace ?: return
         writeMemories(ws, readMemories(ws).filterNot { it.id == entry.id })
-        show(loadEntries())
+        allEntries = loadEntries()
+        show(allEntries.matching(searchField.text?.toString().orEmpty()))
     }
 
     companion object {
