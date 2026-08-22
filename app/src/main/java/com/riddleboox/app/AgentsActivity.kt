@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.riddleboox.app.agent.DEFAULT_AGENT_GREETINGS
 import com.riddleboox.app.agent.AgentCapability
 import com.riddleboox.app.agent.AgentDefinition
@@ -131,6 +132,18 @@ class AgentsActivity : Activity() {
             (template?.greetings ?: DEFAULT_AGENT_GREETINGS).joinToString("\n"),
             singleLine = false,
         ).also { form.addView(it.first); form.addView(it.second) }
+        // xem thử: đọc trực tiếp nội dung đang gõ (chưa lưu) để rút ngắn vòng lặp chỉnh-sửa-xem,
+        // thay vì phải lưu agent rồi mở trang mới trên MainActivity mới thấy greeting trông ra sao.
+        form.addView(
+            action("xem thử") {
+                val candidates = parseGreetings(greetingsField.second.text.toString())
+                if (candidates.isEmpty()) {
+                    Toast.makeText(this, "chưa có câu greeting nào để xem thử", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, candidates.random(), Toast.LENGTH_LONG).show()
+                }
+            },
+        )
         val promptField = input("system prompt", template?.systemPrompt.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
 
         val dialog = AlertDialog.Builder(this)
