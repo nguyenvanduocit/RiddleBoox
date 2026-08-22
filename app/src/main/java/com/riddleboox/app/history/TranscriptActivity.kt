@@ -2,6 +2,8 @@ package com.riddleboox.app.history
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -10,6 +12,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
@@ -101,6 +104,13 @@ class TranscriptActivity : Activity() {
             },
         )
         addView(
+            caption("sao chép").apply {
+                textSize = 16f
+                setPadding(0, dp(12), dp(40), dp(12))
+                setOnClickListener { copy() }
+            },
+        )
+        addView(
             caption("đốt").apply {
                 textSize = 16f
                 setPadding(dp(40), dp(12), dp(12), dp(12))
@@ -140,6 +150,22 @@ class TranscriptActivity : Activity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, "Chia sẻ cuộc trò chuyện"))
+    }
+
+    /**
+     * Puts the conversation straight on the clipboard for pasting into another
+     * app's notes — no share sheet, so no [FileProvider] URI or `cacheDir`
+     * export file to stand up for it.
+     *
+     * Re-read from [store] for the same reason as [share]: a tap a while
+     * after the screen opened should copy what is on disk right now, not
+     * [onCreate]'s stale snapshot.
+     */
+    private fun copy() {
+        val conversation = store.load(conversationId) ?: return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("cuộc trò chuyện", conversation.toPlainText()))
+        Toast.makeText(this, "Đã sao chép", Toast.LENGTH_SHORT).show()
     }
 
     /**
