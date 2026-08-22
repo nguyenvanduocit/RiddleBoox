@@ -70,6 +70,7 @@ class AgentsActivity : Activity() {
                 setPadding(0, dp(10), 0, dp(8))
                 addView(action("dùng") { select(agent) })
                 addView(action("nhớ") { startActivity(MemoriesActivity.intent(this@AgentsActivity, agent.id, agent.name)) })
+                addView(action("nhân bản") { edit(null, template = agent) })
                 if (!agent.builtin) {
                     addView(action("sửa") { edit(agent) })
                     addView(action("xóa") { confirmDelete(agent) })
@@ -103,16 +104,16 @@ class AgentsActivity : Activity() {
         finish()
     }
 
-    private fun edit(agent: AgentDefinition?) {
-        if (agent?.builtin == true) return
+    private fun edit(existing: AgentDefinition?, template: AgentDefinition? = existing) {
+        if (existing?.builtin == true) return
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), 0, dp(24), 0)
         }
-        val idField = input("id", agent?.id.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
-        val nameField = input("tên", agent?.name.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
-        val descriptionField = input("mô tả", agent?.description.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
-        val selectedTools = (agent?.toolIds ?: setOf(AgentCapability.WORKSPACE)).toMutableSet()
+        val idField = input("id", existing?.id.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
+        val nameField = input("tên", template?.name.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
+        val descriptionField = input("mô tả", template?.description.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
+        val selectedTools = (template?.toolIds ?: setOf(AgentCapability.WORKSPACE)).toMutableSet()
         form.addView(caption("tools (chọn capability)").apply { setPadding(0, dp(10), 0, dp(2)) })
         form.addView(toolTags(selectedTools))
         form.addView(caption("workspace luôn bật · agent_management chỉ dành cho agent quản lý mặc định.").apply {
@@ -122,13 +123,13 @@ class AgentsActivity : Activity() {
         })
         val greetingsField = input(
             "greetings (mỗi dòng một câu)",
-            (agent?.greetings ?: DEFAULT_AGENT_GREETINGS).joinToString("\n"),
+            (template?.greetings ?: DEFAULT_AGENT_GREETINGS).joinToString("\n"),
             singleLine = false,
         ).also { form.addView(it.first); form.addView(it.second) }
-        val promptField = input("system prompt", agent?.systemPrompt.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
+        val promptField = input("system prompt", template?.systemPrompt.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle(if (agent == null) "tạo agent" else "sửa agent")
+            .setTitle(if (existing == null) "tạo agent" else "sửa agent")
             .setView(form)
             .setNegativeButton("thôi", null)
             .setPositiveButton("lưu", null)
@@ -136,7 +137,7 @@ class AgentsActivity : Activity() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val error = save(
-                    existing = agent,
+                    existing = existing,
                     id = idField.second.text.toString(),
                     name = nameField.second.text.toString(),
                     description = descriptionField.second.text.toString(),
