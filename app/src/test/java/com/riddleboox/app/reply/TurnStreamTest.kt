@@ -1,6 +1,7 @@
 package com.riddleboox.app.reply
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TurnStreamTest {
@@ -91,5 +92,43 @@ class TurnStreamTest {
 
         assertEquals("", turn.transcript)
         assertEquals("Mực đã nhoè.", turn.reply)
+    }
+
+    // ---- a turn whose whole visible answer is a drawing ----
+
+    @Test
+    fun `a separator opening the stream leaves the page clean and the contract satisfied`() {
+        val (onPage, turn) = run("---\n", "Vẽ một ngôi sao")
+
+        assertEquals("nothing reaches the page", "", onPage)
+        assertEquals("", turn.reply)
+        assertEquals("Vẽ một ngôi sao", turn.transcript)
+        assertTrue("the contract was met, no repair pass is owed", turn.contractSatisfied)
+    }
+
+    @Test
+    fun `a stream-opening separator split across deltas is still one separator`() {
+        val (onPage, turn) = run("-", "-", "-", "\nVẽ đi")
+
+        assertEquals("", onPage)
+        assertEquals("Vẽ đi", turn.transcript)
+        assertTrue(turn.contractSatisfied)
+    }
+
+    @Test
+    fun `a reply that merely starts with a dash is not swallowed`() {
+        val (onPage, turn) = run("- một", " gạch đầu dòng", "\n---\nTrang")
+
+        assertEquals("- một gạch đầu dòng", onPage)
+        assertEquals("- một gạch đầu dòng", turn.reply)
+        assertEquals("Trang", turn.transcript)
+    }
+
+    @Test
+    fun `dashes mid-reply without a newline stay ink`() {
+        val (onPage, turn) = run("A --- B", "\n---\nTrang")
+
+        assertEquals("A --- B", onPage)
+        assertEquals("Trang", turn.transcript)
     }
 }

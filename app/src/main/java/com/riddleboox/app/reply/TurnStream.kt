@@ -52,6 +52,17 @@ class TurnStream {
         }
 
         val pending = held + delta
+        // While nothing has been emitted, `pending` is the whole stream so
+        // far — a separator at its very start has no line above it to end.
+        // That is not hypothetical: a turn whose whole visible answer is a
+        // drawing (the draw tool) streams `---` as its first characters.
+        val atStart = reply.isEmpty()
+        if (atStart && pending.startsWith(TURN_SEPARATOR)) {
+            pastSeparator = true
+            held = ""
+            transcript.append(pending.substring(TURN_SEPARATOR.length))
+            return ""
+        }
         val marker = pending.indexOf(SEPARATOR_LINE)
         if (marker >= 0) {
             pastSeparator = true
@@ -62,8 +73,13 @@ class TurnStream {
             return text
         }
 
-        // Hold back anything that could still grow into the separator.
-        val keep = partialSeparatorAtEnd(pending)
+        // Hold back anything that could still grow into the separator —
+        // including the bare `-`/`--` a stream-opening separator starts with.
+        val keep = if (atStart && TURN_SEPARATOR.startsWith(pending)) {
+            pending.length
+        } else {
+            partialSeparatorAtEnd(pending)
+        }
         held = pending.takeLast(keep)
         val text = pending.dropLast(keep)
         reply.append(text)
