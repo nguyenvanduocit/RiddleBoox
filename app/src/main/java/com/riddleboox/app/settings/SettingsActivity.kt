@@ -116,6 +116,16 @@ class SettingsActivity : Activity() {
             addView(field("base url", baseUrlField))
             addView(field("api key", apiKeyField))
             addView(field("model", modelField))
+            // Ngay dưới "model" vì đây là field cấu hình kết nối cuối cùng —
+            // một nút gộp chung, khôi phục cả "base url" lẫn "model" về giá
+            // trị mặc định lúc build; "api key" cố ý bị loại, xem
+            // resetConnectionDefaults().
+            addView(
+                field(
+                    "khôi phục mặc định (base url + model)",
+                    chooserField("chạm để khôi phục") { resetConnectionDefaults() },
+                ),
+            )
             addView(field("cỡ chữ trả lời", fontSizeField))
             addView(field("cỡ chữ đọc lại", transcriptFontSizeField))
             addView(field("chế độ gửi", sendModeField))
@@ -289,6 +299,25 @@ class SettingsActivity : Activity() {
     private fun choose(model: VisionModel) {
         chosenModel = model.id
         modelField.text = model.id
+    }
+
+    /**
+     * Puts [defaults] — the build-time values from `local.properties`, read
+     * once in [onCreate] — back onto the form for base url and model only.
+     * Only the form changes here, same as every other field on this screen:
+     * nothing reaches [SettingsStore] until "lưu" is tapped, so a mis-tap
+     * just needs "bỏ những thay đổi chưa lưu?" in [leave], not an undo.
+     *
+     * Deliberately leaves [apiKeyField] alone. The key on the form right now
+     * may be the writer's own, pasted in by hand — not the build's default —
+     * and swapping it for the build default here would silently switch
+     * which account every request bills to, with no typo to notice. Base
+     * url and model carry no such risk: a wrong one only 404s.
+     */
+    private fun resetConnectionDefaults() {
+        baseUrlField.setText(defaults.baseUrl)
+        chosenModel = defaults.model
+        modelField.text = defaults.model
     }
 
     /**
