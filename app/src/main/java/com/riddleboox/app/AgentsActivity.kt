@@ -111,6 +111,11 @@ class AgentsActivity : Activity() {
             setPadding(dp(24), 0, dp(24), 0)
         }
         val idField = input("id", existing?.id.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
+        if (existing != null) {
+            // id là bất biến sau khi tạo (save() luôn dùng existing.id khi update) — khoá field để UI không hứa hẹn điều làm không được.
+            idField.second.isEnabled = false
+            idField.second.alpha = 0.6f
+        }
         val nameField = input("tên", template?.name.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
         val descriptionField = input("mô tả", template?.description.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
         val selectedTools = (template?.toolIds ?: setOf(AgentCapability.WORKSPACE)).toMutableSet()
