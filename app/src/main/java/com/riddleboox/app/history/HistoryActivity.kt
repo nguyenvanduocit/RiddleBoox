@@ -6,7 +6,10 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.FileProvider
@@ -22,22 +25,30 @@ import java.util.Locale
 
 /**
  * The diary's table of contents: every conversation it has had, newest first,
- * each one a line the writer can turn back to.
+ * each one a line the writer can turn back to — with a search box above the
+ * list for the writer's own lookups, the way [com.riddleboox.app.tools.DiaryMemory.recall]
+ * already lets the model search this same store.
  *
  * Same sheet of paper as everywhere else — see `ui/Paper.kt`. A column of
  * entries rather than a `ListView`: the whole history is a few dozen lines of
  * text, and a scrolling column of them costs less code than an adapter and
  * reads more like an index page than a settings screen.
  *
- * Holds no state of its own. It reads the store on every [onResume], so a
- * conversation burnt on the screen behind it is simply gone when this one comes
- * back.
+ * Holds one piece of state past what it reads from the store: [allConversations],
+ * the current agent's conversations before the search box narrows them. Kept so
+ * each keystroke re-filters in memory rather than re-reading the store — the
+ * store itself is still re-read on every [onResume], so a conversation burnt on
+ * the screen behind it is simply gone when this one comes back.
  */
 class HistoryActivity : Activity() {
 
     private lateinit var store: ConversationStore
     private lateinit var column: LinearLayout
+    private lateinit var searchField: EditText
     private var agentId: String = "chat"
+
+    /** [agentId]'s conversations as [onResume] last read them, unnarrowed by [searchField]. */
+    private var allConversations: List<StoredConversation> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,12 +57,51 @@ class HistoryActivity : Activity() {
         store = ConversationStore(this)
         agentId = intent.getStringExtra(EXTRA_AGENT_ID).orEmpty().ifBlank { "chat" }
         column = textBlock()
-        setContentView(paperPage(runningHead("lịch sử", "xuất tất cả", onAction = { exportAll() }), column))
+        searchField = searchField()
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(
+                searchField,
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT),
+            )
+            addView(column)
+        }
+        setContentView(paperPage(runningHead("lịch sử", "xuất tất cả", onAction = { exportAll() }), body))
     }
 
     override fun onResume() {
         super.onResume()
-        show(store.list().filter { it.agentId == agentId })
+        allConversations = store.list().filter { it.agentId == agentId }
+        show(allConversations.matching(searchField.text?.toString().orEmpty()))
+    }
+
+    /**
+     * The search box itself: kept out of [column] so [show]'s `removeAllViews`
+     * never touches it, sitting above the entries it narrows.
+     *
+     * Same input-field styling as [com.riddleboox.app.settings.LockActivity]'s
+     * PIN field — transparent background, black text, no border — this app has
+     * no chrome for input fields beyond that. Carries its own left/right inset
+     * ([dp]`(48)`, matching [textBlock]'s) because it sits beside [column] in
+     * `body` rather than inside it, so it has no padded parent to inherit that
+     * inset from.
+     */
+    private fun searchField(): EditText = EditText(this).apply {
+        hint = "tìm trong lịch sử"
+        setSingleLine()
+        textSize = 17f
+        setTextColor(Color.BLACK)
+        setBackgroundColor(Color.TRANSPARENT)
+        setPadding(dp(48), dp(24), dp(48), dp(8))
+        addTextChangedListener(
+            object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    show(allConversations.matching(s?.toString().orEmpty()))
+                }
+            },
+        )
     }
 
     private fun show(conversations: List<StoredConversation>) {
