@@ -236,9 +236,9 @@ private val EXPONENT = Regex("""\^(?:\{([^{}]*)\}|([+-]?\d+))""")
 
 /**
  * Unicode's own small forms — not every character has one. A subscript `b`
- * or a superscript `q` has no dedicated glyph to reach for, so it is left at
- * full size rather than dropped or guessed at: `a_b` reads as `a_b` with the
- * mark gone and both characters kept, not as `ab` with one silently lost.
+ * or a superscript `q` has no dedicated glyph to reach for; a braced run
+ * holding one is left whole for the raster instead of half-converting — see
+ * the comment on [toSubscript] below.
  */
 private val SUBSCRIPT_CHARS = mapOf(
     '0' to '₀', '1' to '₁', '2' to '₂', '3' to '₃', '4' to '₄',
@@ -267,7 +267,8 @@ private val SUPERSCRIPT_CHARS = mapOf(
 // "eⁱπ" — only the `i` raised, the `π` sitting plain-size right after it,
 // one character taller than its neighbour for no reason a reader could see.
 // Left untouched instead — brace, marker and all — a token still carrying
-// `_{...}`/`^{...}` is exactly what [com.riddleboox.app.handwriting.ScriptAwareTextRaster] looks for: it
+// `_{...}`/`^{...}` is exactly what
+// [com.riddleboox.app.handwriting.ScriptAwareTextRaster] looks for: it
 // renders the *whole* run smaller and offset, not character by character,
 // so `eⁱπ` becomes a properly small, properly raised `iπ` together.
 private fun toSubscript(text: String): String = SUBSCRIPT_MARK.replace(text) { match ->
@@ -291,8 +292,9 @@ private fun toSuperscript(text: String): String = EXPONENT.replace(text) { match
 }
 
 /**
- * The one adjustment made for [com.riddleboox.app.handwriting.ScriptAwareTextRaster]'s benefit rather than
- * the page's: a `_{...}`/`^{...}` left untouched by [toSubscript]/
+ * The one adjustment made for
+ * [com.riddleboox.app.handwriting.ScriptAwareTextRaster]'s benefit rather
+ * than the page's: a `_{...}`/`^{...}` left untouched by [toSubscript]/
  * [toSuperscript] above still has its own internal spaces (`_{x → 0}`), and
  * [com.riddleboox.app.handwriting.WriteCursor] tokenizes a reply on
  * whitespace before any raster ever sees it — spaces inside the braces

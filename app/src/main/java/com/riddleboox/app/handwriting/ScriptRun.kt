@@ -14,8 +14,8 @@ internal sealed class ScriptRun {
 }
 
 /**
- * Splits [token] into [ScriptRun]s wherever a `_`/`^` marker LaTeX's own
- * subscript/superscript syntax survives to reach a raster in — braced
+ * Splits [token] into [ScriptRun]s wherever a `_`/`^` marker of LaTeX's own
+ * subscript/superscript syntax survives to reach a raster — braced
  * (`_{content}`) or bare (`_x`, one character).
  *
  * Runs, not a single base+script pair: a chemistry formula carries several
@@ -35,13 +35,8 @@ internal fun parseScriptRuns(token: String): List<ScriptRun> {
     var i = 0
     while (i < token.length) {
         val marker = token[i]
-        val (content, nextIndex) = if (marker == '_' || marker == '^') {
-            scriptContentAt(token, i + 1)
-        } else {
-            null
-        } ?: (null to -1)
-
-        if (content == null) {
+        val script = if (marker == '_' || marker == '^') scriptContentAt(token, i + 1) else null
+        if (script == null) {
             plain.append(marker)
             i++
             continue
@@ -50,6 +45,7 @@ internal fun parseScriptRuns(token: String): List<ScriptRun> {
             runs += ScriptRun.Plain(plain.toString())
             plain.clear()
         }
+        val (content, nextIndex) = script
         runs += if (marker == '_') ScriptRun.Sub(content) else ScriptRun.Sup(content)
         i = nextIndex
     }
@@ -58,17 +54,14 @@ internal fun parseScriptRuns(token: String): List<ScriptRun> {
 }
 
 /**
- * The scripted content starting right after a `_`/`^` at [start], and the
- * index just past it — or null content (with [start] itself as the index to
- * resume plain text from) when there is nothing there to script.
+ * The scripted content starting right after a `_`/`^` at [start] and the
+ * index just past it, or null when there is nothing there to script.
  */
-private fun scriptContentAt(token: String, start: Int): Pair<String?, Int> {
-    if (start >= token.length) return null to start
-    if (token[start] == '{') {
-        val close = token.indexOf('}', start + 1)
-        if (close == -1) return null to start
-        val inner = token.substring(start + 1, close)
-        return if (inner.isEmpty()) null to start else inner to close + 1
-    }
-    return token[start].toString() to start + 1
+private fun scriptContentAt(token: String, start: Int): Pair<String, Int>? {
+    if (start >= token.length) return null
+    if (token[start] != '{') return token[start].toString() to start + 1
+    val close = token.indexOf('}', start + 1)
+    if (close == -1) return null
+    val inner = token.substring(start + 1, close)
+    return if (inner.isEmpty()) null else inner to close + 1
 }

@@ -12,8 +12,8 @@ import kotlin.math.ceil
  * on the braced form") still needs to read as smaller and raised or
  * lowered, not at full size with a stray brace showing.
  *
- * [ScriptRun]s already parsed [parseScriptRuns] the word into normal and
- * scripted pieces; this class only has to rasterize each at its own size
+ * [parseScriptRuns] has already split the word into plain and scripted
+ * [ScriptRun]s; this class only has to rasterize each at its own size
  * through [delegate] and place them side by side. Ordinary words — the
  * overwhelming majority — carry no `_`/`^` at all and fall straight through
  * to [delegate] unchanged, one [parseScriptRuns] call and no extra
@@ -23,13 +23,13 @@ class ScriptAwareTextRaster(private val delegate: TextRaster) : TextRaster {
 
     override fun measure(text: String, fontSizePx: Float): Float {
         val runs = parseScriptRuns(text)
-        if (runs.none { it !is ScriptRun.Plain }) return delegate.measure(text, fontSizePx)
+        if (runs.all { it is ScriptRun.Plain }) return delegate.measure(text, fontSizePx)
         return runs.sumOf { run -> delegate.measure(run.text, run.fontSizePx(fontSizePx)).toDouble() }.toFloat()
     }
 
     override fun rasterize(text: String, fontSizePx: Float): GlyphMask {
         val runs = parseScriptRuns(text)
-        if (runs.none { it !is ScriptRun.Plain }) return delegate.rasterize(text, fontSizePx)
+        if (runs.all { it is ScriptRun.Plain }) return delegate.rasterize(text, fontSizePx)
         return compose(runs, fontSizePx)
     }
 
@@ -82,10 +82,8 @@ class ScriptAwareTextRaster(private val delegate: TextRaster) : TextRaster {
             // minus how far its own ink sits above that baseline.
             val top = (highestBaseline - baselineOf(run, mask)).toInt()
             for (y in 0 until mask.height) {
-                val ty = top + y
-                if (ty !in 0 until height) continue
                 for (x in 0 until mask.width) {
-                    if (mask.isInked(x, y)) combined[left + x, ty] = true
+                    if (mask.isInked(x, y)) combined[left + x, top + y] = true
                 }
             }
             left += mask.width

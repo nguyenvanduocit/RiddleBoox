@@ -66,7 +66,7 @@ class ScriptRunTest {
     }
 
     @Test
-    fun `no marker anywhere yields a single plain run even for an empty string`() {
+    fun `an empty string yields no runs`() {
         assertEquals(emptyList<ScriptRun>(), parseScriptRuns(""))
     }
 }
