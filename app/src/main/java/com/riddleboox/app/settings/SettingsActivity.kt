@@ -12,6 +12,7 @@ import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.riddleboox.app.BuildConfig
 import com.riddleboox.app.library.allFilesAccess
 import com.riddleboox.app.library.canOpenBooks
 import com.riddleboox.app.reply.VisionModel
@@ -29,8 +30,9 @@ import com.riddleboox.app.ui.textBlock
  * as the endpapers of the book rather than an Android dialog bolted on.
  *
  * Holds no state: it prefills from [SettingsStore], and on save writes back
- * and leaves. Defaults arrive as intent extras so this screen never reads
- * `BuildConfig` itself — see [intent].
+ * and leaves. Defaults arrive as intent extras rather than reading
+ * `BuildConfig` directly — see [intent] — except for the version line at the
+ * bottom of the page, which is read-only display with no default to override.
  */
 class SettingsActivity : Activity() {
 
@@ -133,6 +135,12 @@ class SettingsActivity : Activity() {
             // Chu kỳ này chỉ dựng chỗ đặt/xoá PIN; màn hình khoá thật đọc
             // PinStore.verify() là việc của chu kỳ sau, chưa nối ở đây.
             addView(field("khoá bằng mã PIN", pinField))
+            // Đọc-chỉ-đọc, không thuộc dirty()/save(): chỉ để nhận dạng bản
+            // build khi cần hỗ trợ ("bạn đang dùng bản nào?"), không phải một
+            // setting có thể đổi.
+            addView(field("phiên bản", statusField().apply {
+                text = "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})"
+            }))
         }
         // "lưu" rides in the running head rather than under the last field: the
         // soft keyboard eats the lower half of the screen while a field is
