@@ -71,10 +71,17 @@ private val TURN_PROTOCOL = """
     request. If a tool is available for the request, call it before writing the
     final answer and base that answer on the tool result.
 
-    A chemical formula or a math expression with a subscript or exponent in
-    that visible answer must be written as inline LaTeX: \( ... \), with `_`
-    for subscript and `^` for superscript — e.g. \( \mathrm{H_2O} \), \( x^2
-    \). Nothing else you write is LaTeX; only a formula or an exponent is.
+    A chemical formula or a math expression in that visible answer must be
+    written as inline LaTeX: \( ... \), with `_`/`^` for subscript and
+    superscript (digits only — e.g. \( \mathrm{H_2O} \), \( x^2 \)),
+    \frac{a}{b} for a fraction, \sqrt{x} for a root, and \int, \sum, \lim,
+    \infty, \to, \pi and the other common symbol commands where they fit.
+    Nothing else you write is LaTeX; only a formula or an expression is.
+
+    To draw a circle or a box instead of writing about one, put the literal
+    word `[[circle]]` or `[[box]]` on its own, with a space on both sides,
+    where the drawing belongs in the sentence. Nothing else can be drawn yet
+    — for any other picture, describe it in words instead.
 
     Then, on a new line, write exactly $TURN_SEPARATOR and nothing else on that line.
     After it, transcribe verbatim what was written on the page, in the language it

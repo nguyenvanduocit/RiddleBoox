@@ -33,6 +33,7 @@ import com.riddleboox.app.agent.CompositeToolbox
 import com.riddleboox.app.agent.WorkspaceTools
 import com.riddleboox.app.handwriting.HandwritingPlanner
 import com.riddleboox.app.handwriting.PaintTextRaster
+import com.riddleboox.app.handwriting.ShapeAwareTextRaster
 import com.riddleboox.app.history.ConversationStore
 import com.riddleboox.app.history.HistoryActivity
 import com.riddleboox.app.ink.EinkRefresher
@@ -273,7 +274,7 @@ class MainActivity : Activity() {
             buildDefaults.model,
         )
         val replySettings: ReplySettings? = settings.takeIf { it.apiKey.isNotBlank() }
-        val handwritingPlanner = HandwritingPlanner(PaintTextRaster.fromAsset(this))
+        val handwritingPlanner = HandwritingPlanner(ShapeAwareTextRaster(PaintTextRaster.fromAsset(this)))
         stateMachine = RiddleStateMachine(
             strokeStore = strokeStore,
             inkCapture = inkCapture,
