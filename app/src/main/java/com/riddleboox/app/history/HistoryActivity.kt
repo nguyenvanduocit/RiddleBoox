@@ -9,11 +9,13 @@ import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.FileProvider
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
 import com.riddleboox.app.ui.textBlock
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -44,7 +46,7 @@ class HistoryActivity : Activity() {
         store = ConversationStore(this)
         agentId = intent.getStringExtra(EXTRA_AGENT_ID).orEmpty().ifBlank { "chat" }
         column = textBlock()
-        setContentView(paperPage(runningHead("lịch sử"), column))
+        setContentView(paperPage(runningHead("lịch sử", "xuất tất cả", onAction = { exportAll() }), column))
     }
 
     override fun onResume() {
@@ -128,6 +130,32 @@ class HistoryActivity : Activity() {
      */
     private fun writtenOn(conversation: StoredConversation): String =
         DAY_AND_TIME.format(Date(conversation.updatedAtMs)) + " · " + conversation.turns.size + " lượt"
+
+    /**
+     * Writes every conversation for [agentId] out as one plain-text file under
+     * `cacheDir/exports` and hands it to the share sheet — the whole index at
+     * once, the way [TranscriptActivity.share] hands over a single evening.
+     *
+     * Re-reads [store] rather than the list [show] last drew, for the same
+     * reason [TranscriptActivity.share] re-reads instead of reusing [onCreate]'s
+     * snapshot: a tap on "xuất tất cả" a while after the screen opened should
+     * export what's on disk right now, not what was there when this screen was
+     * last resumed.
+     */
+    private fun exportAll() {
+        val conversations = store.list().filter { it.agentId == agentId }
+        val exportsDir = File(cacheDir, "exports").apply { mkdirs() }
+        val file = File(exportsDir, "all-$agentId.txt")
+        file.writeText(conversations.toPlainText())
+
+        val uri = FileProvider.getUriForFile(this, "$packageName.onyx.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "Chia sẻ toàn bộ lịch sử"))
+    }
 
     companion object {
         private const val REQUEST_READ = 1
