@@ -268,3 +268,24 @@ the happy path, so this is real but lower-probability.
 
 **Testability:** pure logic, JVM-testable with `TemporaryFolder`. No
 `AgentManagerToolsTest.kt` exists yet — this would be its first test.
+
+## 8. `RiddleStateMachineTest`'s `a real streamed reply is answered, drawn, and recorded` is flaky (Low, test-only)
+
+Observed once (2026-08-22, ~09:22) during an unrelated `SettingsActivity.kt`
+change's verification: `./gradlew testDebugUnitTest` failed with
+`org.junit.ComparisonFailure: expected:<H[ôm nay tôi buồn.]> but was:<H[]>` at
+`RiddleStateMachineTest.kt:178` (`assertEquals("Hôm nay tôi buồn.",
+turn.transcript)`) — the persisted turn's transcript came back empty.
+Re-running the same test alone, then the full suite, both passed immediately
+after with no code changes in between. Not caused by the `SettingsActivity.kt`
+change in flight at the time (disjoint package, no shared code path).
+
+Likely an eventually-consistent race in the test harness itself — `h.waitForConversations(1)`
+(`RiddleStateMachineTest.kt:176`) polls for a conversation to appear, but the
+one it observed once had the entry created before its `turn.transcript` was
+fully written, not a production bug reproduced without the test's async
+polling shape. Recorded because a flaky test erodes trust in the suite over
+time (a real regression could hide behind "oh, that one's flaky"); worth a
+tighter look if it recurs, not treated as this session's problem to fix per
+this repo's convention for test failures outside the file(s) actually being
+changed.
