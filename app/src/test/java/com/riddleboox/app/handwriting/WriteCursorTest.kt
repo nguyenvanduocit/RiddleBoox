@@ -219,4 +219,86 @@ class WriteCursorTest {
         assertEquals(120f + 96f * 0.55f, cursor.penPoint.y, 0.01f)
         assertEquals(170f, cursor.penPoint.x, 0f)
     }
+
+    // ---- figures ----
+
+    /** A wide flat figure: one diagonal from (0,0) to (16,8). */
+    private fun wideFigure() = SvgFigure(
+        strokes = listOf(WriteStroke(listOf(WritePoint(0f, 0f), WritePoint(16f, 8f)))),
+        width = 16f,
+        height = 8f,
+    )
+
+    @Test
+    fun `a figure on a blank page fills the content width from the start line`() {
+        val cursor = cursor()
+        val placed = cursor.placeFigure(wideFigure())!!
+        // Content width is 280-120=160, so a 16-wide figure scales by 10.
+        assertEquals(listOf(WritePoint(120f, 0f), WritePoint(280f, 80f)), placed.single().points)
+        assertEquals(placed, cursor.plan().strokes)
+    }
+
+    @Test
+    fun `words after a figure carry on below it`() {
+        val cursor = cursor()
+        cursor.placeFigure(wideFigure())
+        cursor.append("aaaa")
+        // Figure bottom 80 plus the 28px gap: the next line starts at 108.
+        assertEquals(listOf(125f to 110f), cursor.plan().bars().takeLast(1))
+    }
+
+    @Test
+    fun `a figure mid-writing goes below the line being written, with air`() {
+        val cursor = cursor()
+        cursor.append("aaaa")
+        val placed = cursor.placeFigure(wideFigure())!!
+        // Below line 0 (height 120) plus the 28px gap.
+        assertEquals(148f, placed.single().points.first().y, 0f)
+    }
+
+    @Test
+    fun `a tall figure is clamped by height and centred`() {
+        val tall = SvgFigure(
+            strokes = listOf(WriteStroke(listOf(WritePoint(0f, 0f), WritePoint(10f, 100f)))),
+            width = 10f,
+            height = 100f,
+        )
+        val placed = cursor().placeFigure(tall)!!
+        // Height clamps at 560 (scale 5.6), width 56, centred in 160: left 172.
+        val xs = placed.single().points.map { it.x }
+        assertEquals(172f, xs.min(), 0.01f)
+        val ys = placed.single().points.map { it.y }
+        assertEquals(560f, ys.max(), 0.01f)
+    }
+
+    @Test
+    fun `a page with too little room left refuses the figure`() {
+        // Available under the reservation: 240 - (120 + 28) = 92 < 96 minimum.
+        val cursor = cursor(bottomLimitPx = 240f)
+        assertEquals(null, cursor.placeFigure(wideFigure()))
+        assertEquals(emptyList<WriteStroke>(), cursor.plan().strokes)
+    }
+
+    @Test
+    fun `a full page refuses the figure rather than drawing over held words`() {
+        val cursor = twoLinePage()
+        cursor.append("aaaa bbbb cccc dddd")
+        assertTrue(cursor.pageFull)
+        assertEquals(null, cursor.placeFigure(wideFigure()))
+    }
+
+    @Test
+    fun `a dense figure is thinned to the point budget`() {
+        val dense = SvgFigure(
+            strokes = listOf(
+                WriteStroke(
+                    (0..40_000).map { i -> WritePoint(i / 2500f, kotlin.math.sin(i / 300f) * 4f) },
+                ),
+            ),
+            width = 16f,
+            height = 8f,
+        )
+        val placed = cursor().placeFigure(dense)!!
+        assertTrue(placed.sumOf { it.points.size } <= 4000)
+    }
 }

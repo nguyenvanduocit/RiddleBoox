@@ -106,6 +106,57 @@ class WriteCursor(
     /** Everything on the current page, as the finished plan it leaves standing. */
     fun plan(): WritePlan = WritePlan(accumulated.toList())
 
+    /**
+     * Lays [figure] on the page as a block of its own: below the line being
+     * written, centred, scaled to fit the room the page still has, with the pen
+     * moved to a fresh line underneath so the words carry on below it. Returns
+     * the strokes it added — already part of [strokes] and [plan] — or null
+     * when the page has no room left for a figure a reader could make out.
+     *
+     * A line of writing plus its gap is always kept clear beneath the figure.
+     * That reservation is what preserves the invariant the rest of this class
+     * rests on: the pen only ever stands on a line [hasRoomForAnotherLine]
+     * approved, so the first word after the figure cannot land below the page.
+     */
+    fun placeFigure(figure: SvgFigure): List<WriteStroke>? {
+        if (pageFull) return null
+        val contentWidthPx = rightLimitPx - marginXPx
+        if (contentWidthPx <= 0f) return null
+        val topPx = when {
+            accumulated.isEmpty() && !lineHasWord -> lineTopPx
+            lineHasWord -> lineTopPx + lineHeightPx + FIGURE_GAP_PX
+            else -> lineTopPx + FIGURE_GAP_PX
+        }
+        val availablePx = bottomLimitPx - topPx - (lineHeightPx + FIGURE_GAP_PX)
+        val maxHeightPx = minOf(MAX_FIGURE_HEIGHT_PX, availablePx)
+        if (maxHeightPx < MIN_FIGURE_HEIGHT_PX) return null
+        val scale = minOf(
+            if (figure.width > 0f) contentWidthPx / figure.width else Float.MAX_VALUE,
+            if (figure.height > 0f) maxHeightPx / figure.height else Float.MAX_VALUE,
+        )
+        val leftPx = marginXPx + (contentWidthPx - figure.width * scale) / 2f
+        val placed = figure.strokes.map { stroke ->
+            WriteStroke(stroke.points.map { WritePoint(leftPx + it.x * scale, topPx + it.y * scale) })
+        }
+        // Thinned to the pen's pace now that the on-page scale is known; a
+        // figure still denser than the point budget is thinned proportionally
+        // harder rather than refused — it draws coarser, not longer.
+        var inked = decimated(placed, FIGURE_POINT_SPACING_PX)
+        val pointCount = inked.sumOf { it.points.size }
+        if (pointCount > MAX_FIGURE_POINTS) {
+            inked = decimated(placed, FIGURE_POINT_SPACING_PX * pointCount / MAX_FIGURE_POINTS)
+        }
+        accumulated += inked
+        lineTopPx = topPx + figure.height * scale + FIGURE_GAP_PX
+        penXPx = marginXPx
+        lineHasWord = false
+        // The figure's own gap is the paragraph air; a break right after it
+        // should not buy more.
+        paragraphOpened = true
+        wobblePx = nextWobble()
+        return inked
+    }
+
     private fun writeWhatFits(): List<WriteStroke> {
         val added = ArrayList<WriteStroke>()
         while (held.isNotEmpty()) {
@@ -205,5 +256,20 @@ class WriteCursor(
 
         /** How far down the line the nib sits — roughly the middle of the ink. */
         const val NIB_HEIGHT_FRACTION = 0.55f
+
+        /** Air kept above and below a placed figure. */
+        const val FIGURE_GAP_PX = 28f
+
+        /** A figure never takes more than about a third of a BOOX page. */
+        const val MAX_FIGURE_HEIGHT_PX = 560f
+
+        /** Smaller than this and a figure is a smudge; the page refuses instead. */
+        const val MIN_FIGURE_HEIGHT_PX = 96f
+
+        /** Target gap between a figure's revealed points, matching handwriting's density. */
+        const val FIGURE_POINT_SPACING_PX = 3.5f
+
+        /** Ceiling on a figure's points — about two seconds of the reveal pen. */
+        const val MAX_FIGURE_POINTS = 4000
     }
 }

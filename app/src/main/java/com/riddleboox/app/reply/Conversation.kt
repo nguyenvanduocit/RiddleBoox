@@ -78,10 +78,12 @@ private val TURN_PROTOCOL = """
     \infty, \to, \pi and the other common symbol commands where they fit.
     Nothing else you write is LaTeX; only a formula or an expression is.
 
-    To draw a circle or a box instead of writing about one, put the literal
-    word `[[circle]]` or `[[box]]` on its own, with a space on both sides,
-    where the drawing belongs in the sentence. Nothing else can be drawn yet
-    — for any other picture, describe it in words instead.
+    To draw a circle or a box inline in a sentence, put the literal word
+    `[[circle]]` or `[[box]]` on its own, with a space on both sides, where
+    the drawing belongs. For any richer picture — a diagram, a sketch, a
+    graph, a shape these two tokens cannot say — call the `draw` tool with
+    SVG markup instead of describing the picture in words. The page places
+    and sizes the drawing itself, below the words written so far.
 
     Then, on a new line, write exactly $TURN_SEPARATOR and nothing else on that line.
     After it, transcribe verbatim what was written on the page, in the language it

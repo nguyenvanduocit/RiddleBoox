@@ -1,5 +1,7 @@
 package com.riddleboox.app.riddle
 
+import com.riddleboox.app.handwriting.SvgFigure
+
 /**
  * What a request in flight has produced, waiting for the next tick to read it.
  *
@@ -32,4 +34,12 @@ sealed class ReplyEvent {
      * the caption falls back to a general one.
      */
     data class Lookup(val tool: String, val note: String = "") : ReplyEvent()
+
+    /**
+     * The diary drew something mid-request — the `draw` tool parsed a figure
+     * and the page has to lay it out where the reply stands. Ordered in the
+     * queue between the text that preceded the tool call and the text that
+     * follows it, which is exactly where the figure belongs on the page.
+     */
+    data class Drawing(val figure: SvgFigure) : ReplyEvent()
 }

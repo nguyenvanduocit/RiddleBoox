@@ -1,5 +1,6 @@
 package com.riddleboox.app.riddle
 
+import com.riddleboox.app.handwriting.SvgFigure
 import com.riddleboox.app.handwriting.WriteStroke
 import com.riddleboox.app.ink.InkStroke
 
@@ -40,6 +41,9 @@ sealed class Effect {
      * [com.riddleboox.app.reply.writableCut]).
      */
     data class FeedReply(val delta: String) : Effect()
+
+    /** Lay [figure] on the page at the nib, sized and centred by the pen itself. */
+    data class DrawFigure(val figure: SvgFigure) : Effect()
 
     /** Add just-revealed reply ink to that layer, and hint at what moved. */
     data class AppendReplyInk(val strokes: List<WriteStroke>, val area: PageRect) : Effect()

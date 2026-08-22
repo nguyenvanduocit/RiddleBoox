@@ -261,6 +261,17 @@ fun decideThinking(
             )
         }
 
+        // The diary drew before it wrote: the reply opens the way a first
+        // delta would, with the figure as its first ink.
+        is ReplyEvent.Drawing -> return Decision(
+            state = RiddleState.Replying(nextTickAtMs = now, lastArrivalAtMs = now),
+            effects = listOf(
+                Effect.BeginReply(REPLY_TOP_PX),
+                Effect.DrawFigure(event.figure),
+                Effect.Status("Đang viết trả lời…"),
+            ),
+        )
+
         // Still thinking, and now with a reason to say so. Only the caption
         // changes; the state is handed back untouched so that neither the retry
         // count nor the patience clock is reset by it.

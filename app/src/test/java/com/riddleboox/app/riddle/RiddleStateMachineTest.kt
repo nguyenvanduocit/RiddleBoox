@@ -7,8 +7,11 @@ import com.riddleboox.app.handwriting.HandwritingPlanner
 import com.riddleboox.app.handwriting.WriteStroke
 import com.riddleboox.app.history.ConversationStore
 import com.riddleboox.app.ink.StrokeStore
+import com.riddleboox.app.handwriting.SvgFigure
+import com.riddleboox.app.handwriting.WritePoint
 import com.riddleboox.app.reply.FakeChatServer
 import com.riddleboox.app.settings.ReplySettings
+import com.riddleboox.app.tools.DrawingBoard
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -51,6 +54,7 @@ class RiddleStateMachineTest {
         val statusEvents = mutableListOf<String>()
         val conversationStore = ConversationStore(File(root, "conversations-store"))
         val pendingTurnMarker = PendingTurnMarker(root)
+        val drawingBoard = DrawingBoard()
 
         val machine = RiddleStateMachine(
             strokeStore = strokeStore,
@@ -63,6 +67,7 @@ class RiddleStateMachineTest {
                 workspace = File(root, "workspace").apply { mkdirs() },
             ),
             replySettings = replySettings,
+            drawingBoard = drawingBoard,
             handwritingPlanner = HandwritingPlanner(FakeRaster()),
             conversationStore = conversationStore,
             pageArchive = null,
@@ -181,6 +186,46 @@ class RiddleStateMachineTest {
             val request = server.takeRequest()
             assertEquals("Bearer sk-test", request.authorization)
             assertTrue("cleared once the turn is safely on disk", !h.pendingTurnMarker.consume())
+        }
+    }
+
+    @Test
+    fun `a figure submitted mid-turn is drawn into the reply and the board closes with it`() {
+        FakeChatServer(FakeChatServer.turn(transcript = "vẽ một đường chéo", reply = "Đây.")).use { server ->
+            val h = harness(replySettings = ReplySettings(server.baseUrl, "sk-test", "openai/gpt-5.6-luna"))
+            h.machine.start()
+            h.tick(0)
+            h.driveUntilIdle() // greeting
+
+            h.busyEvents.clear()
+            h.demoStrokes("vẽ một đường chéo")
+            // commitDemoText launched the request synchronously, so the board
+            // is open right now — this stands in for the draw tool submitting
+            // from the request's own coroutine.
+            val figure = SvgFigure(
+                strokes = listOf(
+                    com.riddleboox.app.handwriting.WriteStroke(
+                        listOf(WritePoint(0f, 0f), WritePoint(16f, 8f)),
+                    ),
+                ),
+                width = 16f,
+                height = 8f,
+            )
+            assertTrue("the board is open while the turn is in flight", h.drawingBoard.submit(figure))
+            h.driveUntilIdle()
+
+            // Page 400 wide, margins 56: a figure fills the 288px content
+            // width where no word from FakeRaster comes close.
+            val standing = h.panel.renders.last { it.replyStrokes.isNotEmpty() }.replyStrokes
+            val figureStrokes = standing.filter { s ->
+                s.points.maxOf { it.x } - s.points.minOf { it.x } > 200f
+            }
+            assertEquals("the figure stands in the finished plan", 1, figureStrokes.size)
+            val words = standing.filterNot { it in figureStrokes }
+            assertTrue("the reply's words are on the page too", words.isNotEmpty())
+
+            assertEquals("Đây.", h.waitForConversations(1).single().turns.single().reply)
+            assertTrue("the board closed with the turn", !h.drawingBoard.submit(figure))
         }
     }
 
