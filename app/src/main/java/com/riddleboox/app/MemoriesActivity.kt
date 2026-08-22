@@ -14,12 +14,14 @@ import android.widget.TextView
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.tools.MemoryEntry
 import com.riddleboox.app.tools.readMemories
+import com.riddleboox.app.tools.writeMemories
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
 import com.riddleboox.app.ui.textBlock
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -27,8 +29,7 @@ import java.util.Locale
 /**
  * What one agent has chosen to remember on purpose, read back as a list —
  * the same `memories.jsonl` [com.riddleboox.app.tools.MemoryTools]'
- * `remember`/`forget_memory` tools write to, just read here rather than
- * written to.
+ * `remember`/`forget_memory` tools write to.
  *
  * Same list-then-detail shape as [com.riddleboox.app.history.HistoryActivity]
  * and [com.riddleboox.app.history.TranscriptActivity]: a scrolling column,
@@ -37,7 +38,15 @@ import java.util.Locale
  * [com.riddleboox.app.reply.Conversation]), so "in full" is a dialog rather
  * than another screen.
  *
- * Reads the store fresh on every [onResume] and holds nothing else: the
+ * Forgetting no longer requires going back to the page and asking the agent
+ * to call `forget_memory` itself: the detail dialog offers "quên đi" too,
+ * writing straight to `memories.jsonl` via [writeMemories] — the same atomic
+ * rewrite [com.riddleboox.app.tools.MemoryTools] uses, just without its
+ * id-prefix guessing, since here the exact [MemoryEntry.id] shown is the one
+ * removed.
+ *
+ * Reads the store fresh on every [onResume] and holds nothing else beyond
+ * [workspace], kept only so a delete doesn't need to reload the agent: the
  * writer reaches this only from the agents screen, and it is never open while
  * the diary itself could be writing to the same file.
  */
@@ -47,6 +56,7 @@ class MemoriesActivity : Activity() {
     private lateinit var column: LinearLayout
     private var agentId: String = ""
     private var agentName: String = ""
+    private var workspace: File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,8 +71,13 @@ class MemoriesActivity : Activity() {
     override fun onResume() {
         super.onResume()
         val agent = agentStore.load(agentId)
-        val entries = if (agent == null) emptyList() else readMemories(agent.workspace).sortedByDescending { it.ms }
-        show(entries)
+        workspace = agent?.workspace
+        show(loadEntries())
+    }
+
+    private fun loadEntries(): List<MemoryEntry> {
+        val ws = workspace ?: return emptyList()
+        return readMemories(ws).sortedByDescending { it.ms }
     }
 
     private fun show(entries: List<MemoryEntry>) {
@@ -121,7 +136,26 @@ class MemoriesActivity : Activity() {
             .setTitle(DAY_AND_TIME.format(Date(entry.ms)))
             .setMessage(entry.content)
             .setPositiveButton("được", null)
+            .setNegativeButton("quên đi") { _, _ -> confirmForget(entry) }
             .show()
+    }
+
+    /**
+     * Asked before removing, same as [com.riddleboox.app.history.TranscriptActivity]'s
+     * "đốt": the file is the only copy, and there is no undo.
+     */
+    private fun confirmForget(entry: MemoryEntry) {
+        AlertDialog.Builder(this)
+            .setMessage("Quên điều này? Không lấy lại được.\n\n${entry.content}")
+            .setNegativeButton("thôi", null)
+            .setPositiveButton("quên") { _, _ -> forget(entry) }
+            .show()
+    }
+
+    private fun forget(entry: MemoryEntry) {
+        val ws = workspace ?: return
+        writeMemories(ws, readMemories(ws).filterNot { it.id == entry.id })
+        show(loadEntries())
     }
 
     companion object {

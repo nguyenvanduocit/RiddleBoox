@@ -104,4 +104,38 @@ class MemoryToolsTest {
     fun `recent memories text is empty when nothing has been remembered`() {
         assertEquals("", recentMemoriesText(folder.newFolder()))
     }
+
+    @Test
+    fun `writeMemories then readMemories round-trips exactly`() {
+        val workspace = folder.newFolder()
+        val entries = listOf(
+            MemoryEntry(id = "id1", ms = 1L, conversation = "e", content = "fact-1"),
+            MemoryEntry(id = "id2", ms = 2L, conversation = "e", content = "fact-2"),
+        )
+
+        writeMemories(workspace, entries)
+
+        assertEquals(entries, readMemories(workspace))
+    }
+
+    @Test
+    fun `writeMemories with an entry filtered out removes only that entry`() {
+        val workspace = folder.newFolder()
+        val entries = listOf(
+            MemoryEntry(id = "id1", ms = 1L, conversation = "e", content = "fact-1"),
+            MemoryEntry(id = "id2", ms = 2L, conversation = "e", content = "fact-2"),
+            MemoryEntry(id = "id3", ms = 3L, conversation = "e", content = "fact-3"),
+        )
+        writeMemories(workspace, entries)
+
+        writeMemories(workspace, readMemories(workspace).filterNot { it.id == "id2" })
+
+        assertEquals(
+            listOf(
+                MemoryEntry(id = "id1", ms = 1L, conversation = "e", content = "fact-1"),
+                MemoryEntry(id = "id3", ms = 3L, conversation = "e", content = "fact-3"),
+            ),
+            readMemories(workspace),
+        )
+    }
 }

@@ -67,6 +67,30 @@ fun readMemories(workspace: File): List<MemoryEntry> {
 }
 
 /**
+ * Rewrites [workspace]'s [MEMORIES_FILE] to hold exactly [entries], atomically —
+ * a temp file written alongside it and renamed over it, so a crash mid-write
+ * never leaves a half-written file behind.
+ *
+ * The same write [MemoryTools] itself uses for `forget_memory`/`remember`,
+ * pulled out here so anything that only reads the file — the agents screen's
+ * memory list — can remove an entry too, without reaching into
+ * [MemoryTools]'s private id-prefix-matching rules it has no use for: the UI
+ * already knows the exact [MemoryEntry.id] of what it is showing.
+ */
+fun writeMemories(workspace: File, entries: List<MemoryEntry>) {
+    val file = File(workspace, MEMORIES_FILE)
+    val json = Json { ignoreUnknownKeys = true }
+    val text = entries.joinToString("") { json.encodeToString(MemoryEntry.serializer(), it) + "\n" }
+    val tmp = File.createTempFile("memories.", ".tmp", file.parentFile)
+    try {
+        tmp.writeText(text)
+        if (!tmp.renameTo(file)) tmp.copyTo(file, overwrite = true)
+    } finally {
+        if (tmp.exists()) tmp.delete()
+    }
+}
+
+/**
  * The most recent memories in [workspace], newest first, one bullet per
  * line — empty when there are none.
  *
@@ -206,16 +230,7 @@ class MemoryTools(
 
     private fun readEntries(): List<MemoryEntry> = readMemories(workspace)
 
-    private fun writeEntries(entries: List<MemoryEntry>) {
-        val text = entries.joinToString("") { json.encodeToString(MemoryEntry.serializer(), it) + "\n" }
-        val tmp = File.createTempFile("memories.", ".tmp", file.parentFile)
-        try {
-            tmp.writeText(text)
-            if (!tmp.renameTo(file)) tmp.copyTo(file, overwrite = true)
-        } finally {
-            if (tmp.exists()) tmp.delete()
-        }
-    }
+    private fun writeEntries(entries: List<MemoryEntry>) = writeMemories(workspace, entries)
 
     private fun memoryLine(entry: MemoryEntry): String = "#${entry.id} · ${day(entry.ms)} — ${entry.content}"
 
