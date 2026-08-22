@@ -149,4 +149,72 @@ class MathChemNotationTest {
         // braced sub-expression itself has no digit-only shape to match.
         assertEquals("lim_{x → 0} f(x)", mathChemNotation("""\lim_{x \to 0} f(x)"""))
     }
+
+    /**
+     * Verbatim from the device: asked for the quadratic formula, `ax^2` and
+     * `b^2` rendered fine, but `\ne`, `\Delta` and both `\frac{...}{...}`
+     * calls reached the page as literal LaTeX source — `\ne` and `\Delta`
+     * because neither command was recognised yet, and `\frac` because its
+     * numerator holds `\sqrt{\Delta}`, a brace-delimited command of its own,
+     * which the fraction's own (deliberately brace-free) capture group
+     * can't straddle in one pass. This is the case [mathChemNotation]'s
+     * fixed-point loop exists for.
+     */
+    @Test
+    fun `the quadratic formula that exposed nesting renders in full`() {
+        assertEquals(
+            "Với a ≠ 0, phương trình ax²+bx+c=0 có biệt thức Δ=b²-4ac. " +
+                "Nếu Δ>0: x₁=(-b+√(Δ))/2a, x₂=(-b-√(Δ))/2a.",
+            mathChemNotation(
+                """Với a \ne 0, phương trình ax^2+bx+c=0 có biệt thức \Delta=b^2-4ac. """ +
+                    """Nếu \Delta>0: x_1=\frac{-b+\sqrt{\Delta}}{2a}, x_2=\frac{-b-\sqrt{\Delta}}{2a}.""",
+            ),
+        )
+    }
+
+    @Test
+    fun `uppercase and lowercase Greek letters are distinct`() {
+        assertEquals("δ vs Δ", mathChemNotation("""\delta vs \Delta"""))
+        assertEquals("σ vs Σ", mathChemNotation("""\sigma vs \Sigma"""))
+    }
+
+    @Test
+    fun `left and right delimiters are dropped, the bracket itself stays`() {
+        assertEquals("(a+b)", mathChemNotation("""\left(a+b\right)"""))
+        assertEquals("[0, 1]", mathChemNotation("""\left[0, 1\right]"""))
+    }
+
+    @Test
+    fun `stripping left and right does not eat into rightarrow`() {
+        // \right is a prefix of \rightarrow — without its own boundary check,
+        // stripping \left/\right would leave a bare "arrow" behind instead
+        // of letting toSymbols convert the whole command to →.
+        assertEquals("x → ∞", mathChemNotation("""x \rightarrow \infty"""))
+    }
+
+    @Test
+    fun `an nth root gets a superscript index before the radical`() {
+        assertEquals("²√(x)", mathChemNotation("""\sqrt[2]{x}"""))
+        assertEquals("³√(8)", mathChemNotation("""\sqrt[3]{8}"""))
+    }
+
+    @Test
+    fun `function names read as the bare word once the backslash is gone`() {
+        assertEquals("sin(x) + cos(x)", mathChemNotation("""\sin(x) + \cos(x)"""))
+        assertEquals("ln(x)", mathChemNotation("""\ln(x)"""))
+    }
+
+    @Test
+    fun `set theory and logic symbols convert`() {
+        assertEquals("∀ x ∈ ℝ, x² ≥ 0", mathChemNotation("""\forall x \in ℝ, x^2 \geq 0"""))
+        assertEquals("A ⊆ B", mathChemNotation("""A \subseteq B"""))
+    }
+
+    @Test
+    fun `a fraction nested two levels deep still resolves`() {
+        // \frac{1}{\frac{1}{2}} — the outer fraction's denominator is itself
+        // a fraction; one pass resolves the inner one, the next resolves the
+        // outer now that its own denominator has no braces left in it.
+        assertEquals("1/(1/2)", mathChemNotation("""\frac{1}{\frac{1}{2}}"""))
+    }
 }
