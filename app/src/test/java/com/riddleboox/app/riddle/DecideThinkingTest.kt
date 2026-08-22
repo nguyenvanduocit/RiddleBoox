@@ -1,8 +1,5 @@
 package com.riddleboox.app.riddle
 
-import com.riddleboox.app.handwriting.SvgFigure
-import com.riddleboox.app.handwriting.WritePoint
-import com.riddleboox.app.handwriting.WriteStroke
 import com.riddleboox.app.ink.InkPoint
 import com.riddleboox.app.ink.InkStroke
 import org.junit.Assert.assertEquals
@@ -61,11 +58,14 @@ class DecideThinkingTest {
 
         assertTrue((decision.state as RiddleState.Replying).streamEnded)
         // Recorded before it is written, and recorded as plain words: the
-        // emphasis is a mark on a screen, not something a pen can make.
+        // emphasis is a mark on a screen, not something a pen can make. The
+        // ink itself goes through feed-and-flush, raw — the feed path is the
+        // one that knows a reply may carry a figure's markup.
         val recorded = decision.effects.filterIsInstance<Effect.RecordTurn>().single()
         assertEquals("trời hôm nay", recorded.transcript)
         assertEquals("Ta hiểu", recorded.reply)
-        assertEquals("Ta hiểu", decision.effects.filterIsInstance<Effect.WriteText>().single().text)
+        assertEquals("**Ta** hiểu", decision.effects.filterIsInstance<Effect.FeedReply>().single().delta)
+        assertEquals(1, decision.effects.filterIsInstance<Effect.FlushReply>().size)
     }
 
     /**
@@ -81,24 +81,6 @@ class DecideThinkingTest {
         assertTrue(decision.effects.filterIsInstance<Effect.Render>().isEmpty())
         assertTrue(decision.effects.filterIsInstance<Effect.Refresh>().isEmpty())
         assertEquals("x", decision.effects.filterIsInstance<Effect.FeedReply>().single().delta)
-    }
-
-    @Test
-    fun `a drawing before any words opens the reply with the figure as first ink`() {
-        val figure = SvgFigure(
-            strokes = listOf(WriteStroke(listOf(WritePoint(0f, 0f), WritePoint(10f, 5f)))),
-            width = 10f,
-            height = 5f,
-        )
-        val decision = decide(now = 400, event = ReplyEvent.Drawing(figure))!!
-        val replying = decision.state as RiddleState.Replying
-
-        assertTrue("the stream is still open", !replying.streamEnded)
-        assertEquals(400, replying.lastArrivalAtMs)
-        assertEquals(
-            listOf(Effect.BeginReply(REPLY_TOP_PX), Effect.DrawFigure(figure)),
-            decision.effects.filter { it is Effect.BeginReply || it is Effect.DrawFigure },
-        )
     }
 
     // ---- looking something up ----

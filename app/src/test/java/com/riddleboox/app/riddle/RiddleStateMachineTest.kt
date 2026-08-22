@@ -7,11 +7,8 @@ import com.riddleboox.app.handwriting.HandwritingPlanner
 import com.riddleboox.app.handwriting.WriteStroke
 import com.riddleboox.app.history.ConversationStore
 import com.riddleboox.app.ink.StrokeStore
-import com.riddleboox.app.handwriting.SvgFigure
-import com.riddleboox.app.handwriting.WritePoint
 import com.riddleboox.app.reply.FakeChatServer
 import com.riddleboox.app.settings.ReplySettings
-import com.riddleboox.app.tools.DrawingBoard
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -54,7 +51,6 @@ class RiddleStateMachineTest {
         val statusEvents = mutableListOf<String>()
         val conversationStore = ConversationStore(File(root, "conversations-store"))
         val pendingTurnMarker = PendingTurnMarker(root)
-        val drawingBoard = DrawingBoard()
 
         val machine = RiddleStateMachine(
             strokeStore = strokeStore,
@@ -67,7 +63,6 @@ class RiddleStateMachineTest {
                 workspace = File(root, "workspace").apply { mkdirs() },
             ),
             replySettings = replySettings,
-            drawingBoard = drawingBoard,
             handwritingPlanner = HandwritingPlanner(FakeRaster()),
             conversationStore = conversationStore,
             pageArchive = null,
@@ -189,9 +184,17 @@ class RiddleStateMachineTest {
         }
     }
 
+    /**
+     * The reply protocol lets the model put a figure into its answer as
+     * inline `<svg>` markup. [FakeChatServer.turn] streams the reply in
+     * 7-character deltas, so the block arrives in many pieces — exactly the
+     * shape the hold-back in `writableCut` and the drain in `feedReply`
+     * exist for: no angle bracket may ever reach the page as ink.
+     */
     @Test
-    fun `a figure submitted mid-turn is drawn into the reply and the board closes with it`() {
-        FakeChatServer(FakeChatServer.turn(transcript = "vẽ một đường chéo", reply = "Đây.")).use { server ->
+    fun `an svg block streamed inside the reply becomes a drawn figure, not ink`() {
+        val reply = "Đây.\n<svg viewBox=\"0 0 16 8\"><line x1=\"0\" y1=\"0\" x2=\"16\" y2=\"8\"/></svg>\nXong."
+        FakeChatServer(FakeChatServer.turn(transcript = "vẽ một đường chéo", reply = reply)).use { server ->
             val h = harness(replySettings = ReplySettings(server.baseUrl, "sk-test", "openai/gpt-5.6-luna"))
             h.machine.start()
             h.tick(0)
@@ -199,22 +202,9 @@ class RiddleStateMachineTest {
 
             h.busyEvents.clear()
             h.demoStrokes("vẽ một đường chéo")
-            // commitDemoText launched the request synchronously, so the board
-            // is open right now — this stands in for the draw tool submitting
-            // from the request's own coroutine.
-            val figure = SvgFigure(
-                strokes = listOf(
-                    com.riddleboox.app.handwriting.WriteStroke(
-                        listOf(WritePoint(0f, 0f), WritePoint(16f, 8f)),
-                    ),
-                ),
-                width = 16f,
-                height = 8f,
-            )
-            assertTrue("the board is open while the turn is in flight", h.drawingBoard.submit(figure))
             h.driveUntilIdle()
 
-            // Page 400 wide, margins 56: a figure fills the 288px content
+            // Page 400 wide, margins 56: the figure fills the 288px content
             // width where no word from FakeRaster comes close.
             val standing = h.panel.renders.last { it.replyStrokes.isNotEmpty() }.replyStrokes
             val figureStrokes = standing.filter { s ->
@@ -222,10 +212,10 @@ class RiddleStateMachineTest {
             }
             assertEquals("the figure stands in the finished plan", 1, figureStrokes.size)
             val words = standing.filterNot { it in figureStrokes }
-            assertTrue("the reply's words are on the page too", words.isNotEmpty())
+            assertTrue("the words around the figure are on the page too", words.isNotEmpty())
 
-            assertEquals("Đây.", h.waitForConversations(1).single().turns.single().reply)
-            assertTrue("the board closed with the turn", !h.drawingBoard.submit(figure))
+            // The record keeps the words alone; the markup became ink.
+            assertEquals("Đây.\n\nXong.", h.waitForConversations(1).single().turns.single().reply)
         }
     }
 

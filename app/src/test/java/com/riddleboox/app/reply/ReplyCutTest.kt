@@ -73,4 +73,34 @@ class ReplyCutTest {
     fun `leading whitespace alone is writable`() {
         assertEquals(" ", writable(" x"))
     }
+
+    // ---- inline figures ----
+
+    @Test
+    fun `an open svg block settles the words before it and holds itself`() {
+        assertEquals("Đây là ", writable("""Đây là <svg viewBox="0 0"""))
+    }
+
+    @Test
+    fun `an svg block butting against a word holds the whole word`() {
+        assertEquals(0, writableCut("hình:<svg x"))
+    }
+
+    @Test
+    fun `a completed block is found with its exact bounds, whatever the case`() {
+        val text = "a <SVG>b</Svg> c"
+        val block = completedSvgBlock(text)!!
+        assertEquals("<SVG>b</Svg>", text.substring(block.first, block.last + 1))
+    }
+
+    @Test
+    fun `an unclosed block is not yet a block`() {
+        assertEquals(null, completedSvgBlock("a <svg>b</sv"))
+    }
+
+    @Test
+    fun `stripping removes every completed block and keeps the words`() {
+        assertEquals("a  b  c", stripSvgBlocks("a <svg>1</svg> b <svg>2</svg> c"))
+        assertEquals("chưa xong <svg", stripSvgBlocks("chưa xong <svg"))
+    }
 }

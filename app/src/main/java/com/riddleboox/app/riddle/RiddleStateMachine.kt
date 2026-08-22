@@ -4,7 +4,6 @@ import android.util.Log
 import com.riddleboox.app.agent.AgentDefinition
 import com.riddleboox.app.handwriting.HandwritingPlanner
 import com.riddleboox.app.handwriting.ReplyRevealCursor
-import com.riddleboox.app.handwriting.SvgFigure
 import com.riddleboox.app.handwriting.WriteCursor
 import com.riddleboox.app.handwriting.WritePlan
 import com.riddleboox.app.handwriting.WritePoint
@@ -17,16 +16,18 @@ import com.riddleboox.app.ink.InkStroke
 import com.riddleboox.app.ink.PageArchive
 import com.riddleboox.app.ink.PageRasterizer
 import com.riddleboox.app.ink.StrokeStore
+import com.riddleboox.app.handwriting.svgFigure
 import com.riddleboox.app.reply.Conversation
 import com.riddleboox.app.reply.Toolbox
+import com.riddleboox.app.reply.completedSvgBlock
 import com.riddleboox.app.reply.plainText
 import com.riddleboox.app.reply.reasoningFor
 import com.riddleboox.app.reply.replyClient
 import com.riddleboox.app.reply.replyModel
+import com.riddleboox.app.reply.svgOpenAt
 import com.riddleboox.app.reply.writableCut
 import com.riddleboox.app.settings.ReplySettings
 import com.riddleboox.app.settings.SendMode
-import com.riddleboox.app.tools.DrawingBoard
 import com.riddleboox.app.tools.recentMemoriesText
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -79,12 +80,6 @@ class RiddleStateMachine(
      * which is what it does on a device whose library cannot be reached.
      */
     toolbox: Toolbox? = null,
-    /**
-     * Where the `draw` tool hands figures over, when the toolbox carries one —
-     * opened per request and closed with the turn, exactly the binding rule
-     * [replyEvents] lives by. Null in tests that never draw.
-     */
-    private val drawingBoard: DrawingBoard? = null,
     private val handwritingPlanner: HandwritingPlanner,
     /** The writer's chosen glyph height for the diary's own hand — see [com.riddleboox.app.settings.ReplyFontSize]. */
     private val replyFontSizePx: Float = HandwritingPlanner.DEFAULT_FONT_SIZE_PX,
@@ -307,7 +302,6 @@ class RiddleStateMachine(
      */
     private fun abandonReply() {
         replyJob?.cancel()
-        drawingBoard?.close()
         replyEvents = ConcurrentLinkedQueue()
     }
 
@@ -363,7 +357,7 @@ class RiddleStateMachine(
             is Effect.BeginReply -> beginReply(effect.startYPx)
             is Effect.WriteText -> writeText(effect.text)
             is Effect.FeedReply -> feedReply(effect.delta)
-            is Effect.DrawFigure -> drawFigure(effect.figure)
+            Effect.FlushReply -> flushPendingText()
             is Effect.AppendReplyInk -> panel.appendReplyStrokes(effect.strokes, effect.area)
             Effect.ClearReplyLayer -> panel.clearReplyLayer()
             is Effect.Refresh -> when (effect.mode) {
@@ -583,10 +577,8 @@ class RiddleStateMachine(
         // A page is genuinely in flight from here — see [PendingTurnMarker].
         pendingTurnMarker.set()
         // Bound to the queue live at launch, so a request abandoned mid-flight
-        // cannot post into the one the next turn reads. The drawing board is
-        // bound the same way, for the same reason.
+        // cannot post into the one the next turn reads.
         val events = replyEvents
-        drawingBoard?.open { figure -> events.add(ReplyEvent.Drawing(figure)) }
         replyJob = replyScope.launch {
             val png = PageRasterizer.rasterize(strokes)
             if (png == null) {
@@ -684,21 +676,23 @@ class RiddleStateMachine(
     }
 
     /**
-     * Lay [figure] on the page at the nib and hand its strokes to the
-     * revealing pen, so a drawing appears the way handwriting does — stroke by
-     * stroke, not as a stamp.
+     * Parse [markup] — a complete `<svg>…</svg>` block the reply carried
+     * inline — and lay the figure on the page at the nib, its strokes handed
+     * to the revealing pen so a drawing appears the way handwriting does:
+     * stroke by stroke, not as a stamp.
      *
-     * The held-back text is flushed first: a drawing arrives at a tool-call
-     * boundary, so whatever [pendingText] still holds is a finished sentence
-     * that belongs above the figure, not below it.
-     *
-     * A page too full for a readable figure drops it with a note. The turn
-     * carries on in words — the model was already told the page decides, and
-     * ink that was never laid cannot be missed by [written] or the history.
+     * Refusals are quiet on purpose. Markup the parser cannot read, or a page
+     * too full for a readable figure, drops the drawing with a log note and
+     * the turn carries on in words — there is no tool round left open to
+     * answer an error into, and ink that was never laid cannot be missed by
+     * [written] or the history.
      */
-    private fun drawFigure(figure: SvgFigure) {
+    private fun drawFigure(markup: String) {
         val cursor = writeCursor ?: return
-        flushPendingText()
+        val figure = runCatching { svgFigure(markup) }.getOrElse { error ->
+            Log.w(TAG, "figure markup refused: ${error.message}")
+            return
+        }
         val placed = cursor.placeFigure(figure)
         if (placed == null) {
             Log.w(TAG, "figure dropped: no room left on the page")
@@ -711,9 +705,28 @@ class RiddleStateMachine(
     /**
      * Takes streamed [delta] and writes as much of it as is now settled; the
      * rest waits for the delta that settles it (see [writableCut]).
+     *
+     * A figure travels in this same stream as `<svg>…</svg>` markup, and a
+     * completed block is as settled as a word with whitespace after it: the
+     * text before it is written, the block itself becomes ink through
+     * [drawFigure], and only then is the remainder cut as usual —
+     * [writableCut] holds anything from a still-open block back, so markup
+     * never reaches the page as angle brackets.
      */
     private fun feedReply(delta: String) {
         pendingText.append(delta)
+        while (true) {
+            val block = completedSvgBlock(pendingText.toString()) ?: break
+            val before = pendingText.substring(0, block.first)
+            val markup = pendingText.substring(block.first, block.last + 1)
+            pendingText.delete(0, block.last + 1)
+            if (before.isNotBlank()) {
+                val ink = inkable(before)
+                writeText(ink)
+                written.append(ink, strokesLaidOut = writeCursor?.strokes?.size ?: 0)
+            }
+            drawFigure(markup)
+        }
         val cut = writableCut(pendingText.toString())
         if (cut <= 0) return
         val chunk = pendingText.substring(0, cut)
@@ -868,10 +881,6 @@ class RiddleStateMachine(
                     Log.i(TAG, "looking up mid-reply: ${event.tool}")
                     next = next.copy(lastArrivalAtMs = now)
                 }
-                is ReplyEvent.Drawing -> {
-                    drawFigure(event.figure)
-                    next = next.copy(lastArrivalAtMs = now)
-                }
                 is ReplyEvent.Complete -> {
                     flushPendingText()
                     persistTurn(event.transcript, plainText(event.text))
@@ -897,13 +906,25 @@ class RiddleStateMachine(
         }
     }
 
-    /** Whatever was held back was never a mark; it is words, and it is the last of them. */
+    /**
+     * Whatever was held back was never a mark; it is words, and it is the
+     * last of them — with two exceptions a figure adds. A block that
+     * completed on the very last delta is drawn ([feedReply]'s own loop,
+     * reused by feeding it nothing new), and a block the stream ended in the
+     * middle of is dropped with a note: half a figure's markup is not words
+     * either, and inked angle brackets cannot be taken back.
+     */
     private fun flushPendingText() {
         if (pendingText.isEmpty()) return
-        val ink = plainText(pendingText.toString())
+        feedReply("")
+        val text = pendingText.toString()
+        pendingText.setLength(0)
+        val opensAt = svgOpenAt(text)
+        if (opensAt != null) Log.w(TAG, "reply ended mid-figure; the unfinished markup is dropped")
+        val ink = plainText(if (opensAt == null) text else text.substring(0, opensAt))
+        if (ink.isEmpty()) return
         writeText(ink)
         written.append(ink, strokesLaidOut = writeCursor?.strokes?.size ?: 0)
-        pendingText.setLength(0)
     }
 
     /**
@@ -972,10 +993,6 @@ class RiddleStateMachine(
      */
     private fun finishTurn() {
         pendingTurnMarker.clear()
-        // The turn is over; a figure a stale coroutine submits after this has
-        // no page to land on. The queue itself is not swapped here, so the
-        // board must not stay bound to it.
-        drawingBoard?.close()
         val plan = writeCursor?.plan() ?: WritePlan(emptyList())
         panel.render(PageRenderState(replyStrokes = plan.strokes))
         panel.clearReplyLayer()

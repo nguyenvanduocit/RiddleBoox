@@ -243,9 +243,11 @@ fun decideThinking(
             ),
         )
 
-        // A reply short enough to arrive whole before the first tick.
+        // A reply short enough to arrive whole before the first tick. It goes
+        // through the same feed-and-flush the streamed path uses, because it
+        // may carry a figure's markup that [Effect.WriteText] would ink as
+        // angle brackets; what is recorded is the words alone.
         is ReplyEvent.Complete -> {
-            val text = plainText(event.text)
             return Decision(
                 state = RiddleState.Replying(
                     nextTickAtMs = now,
@@ -253,24 +255,14 @@ fun decideThinking(
                     streamEnded = true,
                 ),
                 effects = listOf(
-                    Effect.RecordTurn(event.transcript, text),
+                    Effect.RecordTurn(event.transcript, plainText(event.text)),
                     Effect.BeginReply(REPLY_TOP_PX),
-                    Effect.WriteText(text),
+                    Effect.FeedReply(event.text),
+                    Effect.FlushReply,
                     Effect.Status("Đang viết trả lời…"),
                 ),
             )
         }
-
-        // The diary drew before it wrote: the reply opens the way a first
-        // delta would, with the figure as its first ink.
-        is ReplyEvent.Drawing -> return Decision(
-            state = RiddleState.Replying(nextTickAtMs = now, lastArrivalAtMs = now),
-            effects = listOf(
-                Effect.BeginReply(REPLY_TOP_PX),
-                Effect.DrawFigure(event.figure),
-                Effect.Status("Đang viết trả lời…"),
-            ),
-        )
 
         // Still thinking, and now with a reason to say so. Only the caption
         // changes; the state is handed back untouched so that neither the retry

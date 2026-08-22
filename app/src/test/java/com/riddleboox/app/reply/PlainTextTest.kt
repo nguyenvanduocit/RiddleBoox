@@ -5,6 +5,14 @@ import org.junit.Test
 
 class PlainTextTest {
 
+    @Test
+    fun `a figure's markup is ink on the page, never recorded words`() {
+        assertEquals(
+            "Đây.\n\nXong.",
+            plainText("Đây.\n<svg viewBox=\"0 0 4 4\"><line x1=\"0\" y1=\"0\" x2=\"4\" y2=\"4\"/></svg>\nXong."),
+        )
+    }
+
     /** Verbatim from the device: the reply that put asterisks on the page. */
     @Test
     fun `the reply that started this keeps its words and loses its marks`() {

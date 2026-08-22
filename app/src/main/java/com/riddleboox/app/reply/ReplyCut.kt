@@ -22,10 +22,52 @@ private val MARK_CHARS = charArrayOf('*', '_', '`')
 fun writableCut(pending: String): Int {
     val wordEnd = lastWordBreak(pending)
     if (wordEnd == 0) return 0
-    val mark = firstUnclosedMark(pending, wordEnd) ?: return wordEnd
+    // Everything from an open figure onward is markup, not ink: it settles the
+    // words before it and holds itself until the block closes and is drawn
+    // (the state machine drains completed blocks before cutting, so an open
+    // tag seen here is always still growing).
+    val svg = svgOpenAt(pending)
+    val limit = if (svg != null && svg < wordEnd) lastWordBreak(pending.substring(0, svg)) else wordEnd
+    if (limit == 0) return 0
+    val mark = firstUnclosedMark(pending, limit) ?: return limit
     // A mark can open mid-word — `b**c` — so stopping at the mark itself would
     // hand the pen half a word and it would write the other half as a second.
     return lastWordBreak(pending.substring(0, mark))
+}
+
+private const val SVG_OPEN = "<svg"
+private const val SVG_CLOSE = "</svg>"
+
+/** Where figure markup begins in [text], or null when none has opened. */
+fun svgOpenAt(text: String): Int? =
+    text.indexOf(SVG_OPEN, ignoreCase = true).takeIf { it >= 0 }
+
+/**
+ * The first complete `<svg>…</svg>` block in [text], as start until one past
+ * its end — null while the block is still streaming in. The reply protocol
+ * lets the model put a figure's markup straight into its answer; a block is
+ * only a figure once it has closed, the same way an emphasis mark is only a
+ * mark once it pairs.
+ */
+fun completedSvgBlock(text: String): IntRange? {
+    val start = svgOpenAt(text) ?: return null
+    val close = text.indexOf(SVG_CLOSE, startIndex = start, ignoreCase = true)
+    if (close < 0) return null
+    return start until close + SVG_CLOSE.length
+}
+
+/**
+ * [text] with every complete figure block removed — what a reply looks like
+ * everywhere words are kept: the recorded turn, the conversation the model
+ * carries forward. The figure lives as ink on the page alone; markup carried
+ * into history would cost hundreds of tokens on every later turn.
+ */
+fun stripSvgBlocks(text: String): String {
+    var out = text
+    while (true) {
+        val block = completedSvgBlock(out) ?: return out
+        out = out.substring(0, block.first) + out.substring(block.last + 1)
+    }
 }
 
 /** Index just past the last whitespace run, i.e. the end of the last whole word. */

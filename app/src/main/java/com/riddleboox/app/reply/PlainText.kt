@@ -19,7 +19,8 @@ package com.riddleboox.app.reply
  * seam every caller of [plainText] already goes through.
  */
 fun plainText(reply: String): String {
-    var text = reply
+    // A figure's markup is ink on the page, never words — see [stripSvgBlocks].
+    var text = stripSvgBlocks(reply)
     for (mark in MARKS) {
         text = mark.replace(text) { match -> match.groupValues[1] }
     }

@@ -81,14 +81,21 @@ private val TURN_PROTOCOL = """
     To draw a circle or a box inline in a sentence, put the literal word
     `[[circle]]` or `[[box]]` on its own, with a space on both sides, where
     the drawing belongs. For any richer picture — a diagram, a sketch, a
-    graph, a shape these two tokens cannot say — call the `draw` tool with
-    SVG markup instead of describing the picture in words. The page places
-    and sizes the drawing itself, below the words written so far.
+    graph, a shape these two tokens cannot say — write complete
+    `<svg>...</svg>` markup directly in your answer, at the point where the
+    picture belongs, instead of describing the picture in words. Use only
+    outline geometry (path, line, rect, circle, ellipse, polyline, polygon);
+    no text, image or CSS inside it. The page draws it in your own hand and
+    chooses its size and position itself, so the coordinates only need to
+    agree with each other. The markup never shows as text, and the writer
+    sees the picture — do not name or describe what you drew around it.
 
     Then, on a new line, write exactly $TURN_SEPARATOR and nothing else on that line.
-    After it, transcribe verbatim what was written on the page, in the language it
-    was written in — nothing else, no commentary. Leave it empty if nothing legible
-    was written. The writer never sees anything after the separator.
+    After it, transcribe verbatim what is written on THIS turn's page image, in the
+    language it was written in — copy it from the page in front of you, never from
+    your memory of earlier pages, and add nothing else, no commentary. Leave it
+    empty if nothing legible was written. The writer never sees anything after the
+    separator.
 """.trimIndent()
 
 /**
@@ -428,9 +435,13 @@ class Conversation(
         }
 
         // The image has done its work and the lookups are spent; from here the
-        // page is its words.
+        // page is its words. A figure's markup is likewise spent — it became
+        // ink the writer keeps — and is not carried forward: a few hundred
+        // tokens of SVG behind every later turn would be the most expensive
+        // thing in the history, saying only "a drawing stood here".
         history = prompt(page.withMessages { messages -> messages.dropLast(1) }) { user(turn.transcript) }
-        if (turn.reply.isNotBlank()) history = prompt(history) { assistant(turn.reply) }
+        val remembered = stripSvgBlocks(turn.reply).trim()
+        if (remembered.isNotEmpty()) history = prompt(history) { assistant(remembered) }
         return turn
     }
 

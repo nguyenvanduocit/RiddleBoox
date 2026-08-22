@@ -45,20 +45,25 @@ Mỗi agent có bộ greeting riêng được lưu trong `agent.json`. Khi tạo
 câu trên một dòng trong trường `greetings`; khi mở trang mới, app chọn ngẫu nhiên từ đúng bộ
 của agent đang được chọn và tránh lặp lại câu vừa dùng.
 
-Mọi agent đều mang sẵn **bộ tool mặc định** — workspace, memory và `draw` (vẽ hình) — được
-inject vô điều kiện trong `MainActivity.agentToolbox`, không cần khai trong `agent.json` và
-không tắt được. Ngoài bộ đó, tool được cấp theo capability của từng agent: `notes` có thêm
-`boox_notes`; `library` có thêm tool thư viện và `dilib`; chỉ `agent-manager` built-in có capability
+Mọi agent đều mang sẵn **bộ tool mặc định** — workspace và memory — được inject vô điều kiện
+trong `MainActivity.agentToolbox`, không cần khai trong `agent.json` và không tắt được. Ngoài
+bộ đó, tool được cấp theo capability của từng agent: `notes` có thêm `boox_notes`; `library`
+có thêm tool thư viện và `dilib`; chỉ `agent-manager` built-in có capability
 `agent_management`. Model chỉ nhận descriptor của capability được cấp nên các agent khác
 không biết những tool không thuộc vai trò của mình tồn tại.
 
-Tool `draw` nhận SVG (path/line/rect/circle/ellipse/polyline/polygon, có transform; không
-text/CSS/image) và vẽ hình lên trang bằng chính nét bút của diary: `handwriting/SvgInk.kt`
-parse + flatten thành polyline thuần Kotlin, `WriteCursor.placeFigure` tự chọn vị trí (dưới
-dòng đang viết), tự scale (tối đa ~1/3 trang, căn giữa, luôn chừa một dòng chữ bên dưới) và
-decimate điểm theo tốc độ reveal. Trang gần hết chỗ thì hình bị bỏ qua (log warning) — model
-đã được dặn là trang tự quyết. Hình không đi vào transcript nên resume một cuộc trò chuyện cũ
-chỉ vẽ lại phần chữ.
+**Vẽ hình không phải tool** mà là giao thức in-band như `[[circle]]` và LaTeX: model đặt thẳng
+`<svg>…</svg>` vào reply tại đúng chỗ hình thuộc về (TURN_PROTOCOL trong `reply/Conversation.kt`),
+nên mọi agent và **mọi model** — kể cả model không hỗ trợ tool-call — đều vẽ được, không tốn
+thêm request nào. Stream giữ block chưa đóng lại như giữ mark chưa đóng (`reply/ReplyCut.kt`:
+`writableCut`/`completedSvgBlock`), block đóng xong thì `handwriting/SvgInk.kt` parse + flatten
+thành polyline thuần Kotlin (đủ grammar `path` kể cả arc, shapes, transforms) và
+`WriteCursor.placeFigure` tự chọn vị trí (dưới dòng đang viết), tự scale (tối đa ~1/3 trang,
+căn giữa, luôn chừa một dòng chữ bên dưới), decimate điểm theo tốc độ reveal — hình hiện ra
+từng nét như chữ viết tay. Markup bị strip khỏi mọi chỗ giữ chữ (`stripSvgBlocks`: bản ghi
+lượt, history mang sang lượt sau) nên không bao giờ thành mực góc-nhọn hay token phí; trang
+gần hết chỗ hoặc markup hỏng thì hình bị bỏ qua với log warning. Hình không đi vào transcript
+nên resume một cuộc trò chuyện cũ chỉ vẽ lại phần chữ.
 
 Workspace tools an toàn gồm list, read, write, append, edit, delete, mkdir, stat, filename
 search, grep và regex search. Path traversal, absolute path, symlink thoát khỏi workspace và
