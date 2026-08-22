@@ -33,7 +33,7 @@ class AgentStoreTest {
         val tutor = store.load("english-tutor")!!
         assertTrue(tutor.builtin)
         assertTrue(tutor.systemPrompt.contains("recall_memories"))
-        assertEquals(setOf(AgentCapability.WORKSPACE), tutor.toolIds)
+        assertEquals(emptySet<String>(), tutor.toolIds)
 
         assertEquals(5, store.list().size)
     }
@@ -80,7 +80,7 @@ class AgentStoreTest {
         store.ensureDefaults()
         val current = store.load("library")!!
         val chosen = current.manifest.copy(
-            toolIds = setOf(AgentCapability.WORKSPACE, AgentCapability.LIBRARY),
+            toolIds = setOf(AgentCapability.LIBRARY),
         )
         File(folder.root, "agents/library/agent.json").writeText(
             Json { encodeDefaults = true }.encodeToString(AgentManifest.serializer(), chosen),

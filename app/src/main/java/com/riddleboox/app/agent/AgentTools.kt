@@ -40,7 +40,7 @@ class AgentManagerTools(private val store: AgentStore) : Toolbox {
             optionalParameters = listOf(
                 ToolParameterDescriptor("id", "Stable lowercase id; generated from name when omitted.", ToolParameterType.String),
                 ToolParameterDescriptor("description", "Short purpose shown in the agent list.", ToolParameterType.String),
-                ToolParameterDescriptor("tools", "Comma-separated capabilities: workspace, library, dilib, or boox_notes. Agent-management is reserved for the built-in manager.", ToolParameterType.String),
+                ToolParameterDescriptor("tools", "Comma-separated capabilities: library, dilib, or boox_notes. Every agent already carries workspace, memory and drawing by default. Agent-management is reserved for the built-in manager.", ToolParameterType.String),
                 ToolParameterDescriptor("greetings", "Opening lines, one greeting per line, for this agent.", ToolParameterType.String),
             ),
         ),
@@ -54,7 +54,7 @@ class AgentManagerTools(private val store: AgentStore) : Toolbox {
                 ToolParameterDescriptor("name", "New display name.", ToolParameterType.String),
                 ToolParameterDescriptor("description", "New purpose description.", ToolParameterType.String),
                 ToolParameterDescriptor("system_prompt", "New complete system prompt.", ToolParameterType.String),
-                ToolParameterDescriptor("tools", "Comma-separated capabilities: workspace, library, dilib, or boox_notes. Agent-management remains manager-only.", ToolParameterType.String),
+                ToolParameterDescriptor("tools", "Comma-separated capabilities: library, dilib, or boox_notes. Workspace, memory and drawing are every agent's by default. Agent-management remains manager-only.", ToolParameterType.String),
                 ToolParameterDescriptor("greetings", "Replacement opening lines, one greeting per line, for this agent.", ToolParameterType.String),
             ),
         ),

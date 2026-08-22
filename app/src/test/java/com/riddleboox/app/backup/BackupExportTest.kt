@@ -1,6 +1,5 @@
 package com.riddleboox.app.backup
 
-import com.riddleboox.app.agent.AgentCapability
 import com.riddleboox.app.agent.AgentDefinition
 import com.riddleboox.app.agent.AgentManifest
 import com.riddleboox.app.history.StoredConversation
@@ -24,7 +23,7 @@ class BackupExportTest {
     private val dayAndTime = SimpleDateFormat("d/M/yyyy · HH:mm", Locale.getDefault())
 
     private fun agent(id: String, name: String) = AgentDefinition(
-        manifest = AgentManifest(id = id, name = name, toolIds = setOf(AgentCapability.WORKSPACE)),
+        manifest = AgentManifest(id = id, name = name),
         systemPrompt = "Bạn là $name.",
         workspace = folder.newFolder(id),
     )

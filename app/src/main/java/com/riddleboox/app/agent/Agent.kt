@@ -15,8 +15,12 @@ data class AgentManifest(
     val name: String,
     val description: String = "",
     val builtin: Boolean = false,
-    /** Capability ids, resolved to toolboxes only for this agent. */
-    val toolIds: Set<String> = setOf(AgentCapability.WORKSPACE),
+    /**
+     * Capability ids this agent opts into, resolved to toolboxes at runtime.
+     * The default toolset (workspace, memory, drawing) is every agent's and is
+     * never listed here — see [AgentCapability].
+     */
+    val toolIds: Set<String> = emptySet(),
     /** Short lines the diary may write when this agent opens a blank page. */
     val greetings: List<String> = emptyList(),
     val createdAtMs: Long = System.currentTimeMillis(),
@@ -145,7 +149,7 @@ class AgentStore(root: File) {
         description: String,
         systemPrompt: String,
         builtin: Boolean = false,
-        tools: Set<String> = setOf(AgentCapability.WORKSPACE),
+        tools: Set<String> = emptySet(),
         greetings: List<String> = DEFAULT_AGENT_GREETINGS,
     ): AgentDefinition {
         require(isValidId(id)) { "Invalid agent id: $id" }
@@ -283,7 +287,7 @@ data class DefaultAgent(
     val name: String,
     val description: String,
     val systemPrompt: String,
-    val toolIds: Set<String> = setOf(AgentCapability.WORKSPACE),
+    val toolIds: Set<String> = emptySet(),
     val greetings: List<String> = DEFAULT_AGENT_GREETINGS,
 )
 
@@ -313,7 +317,6 @@ val DEFAULT_AGENTS: List<DefaultAgent> = listOf(
             người dùng hỏi trực tiếp. Không bịa sự kiện; khi thiếu thông tin, hãy nói rõ.
             Giữ câu trả lời vừa đủ ngắn để có thể viết lên một trang giấy.
         """.trimIndent(),
-        toolIds = setOf(AgentCapability.WORKSPACE),
         greetings = DEFAULT_AGENT_GREETINGS,
     ),
     DefaultAgent(
@@ -333,7 +336,7 @@ val DEFAULT_AGENTS: List<DefaultAgent> = listOf(
             dẹp; nếu lời họ khớp với nhiều thứ, hỏi lại thứ nào trước khi xóa, và sau
             khi xóa hãy nói rõ đã mất gì.
         """.trimIndent(),
-        toolIds = setOf(AgentCapability.WORKSPACE, AgentCapability.LIBRARY, AgentCapability.DILIB),
+        toolIds = setOf(AgentCapability.LIBRARY, AgentCapability.DILIB),
         greetings = listOf(
             "Có một cuốn sách nào đó đang mở trước mặt ngươi. Kể ta nghe về nó.",
             "Có một đoạn chữ đang chờ được hiểu. Hãy viết đi.",
@@ -361,7 +364,7 @@ val DEFAULT_AGENTS: List<DefaultAgent> = listOf(
             viễn cả chữ viết tay lẫn các trang đã xuất; chỉ làm khi người dùng yêu cầu
             đúng cuốn đó, và nói rõ đã mất gì sau khi xóa xong.
         """.trimIndent(),
-        toolIds = setOf(AgentCapability.WORKSPACE, AgentCapability.BOOX_NOTES),
+        toolIds = setOf(AgentCapability.BOOX_NOTES),
         greetings = listOf(
             "Ta đã mở sẵn chỗ cho điều ngươi muốn nhớ.",
             "Một ý nghĩ vừa đến. Đừng để nó trôi mất.",
@@ -395,7 +398,6 @@ val DEFAULT_AGENTS: List<DefaultAgent> = listOf(
             tiên: hỏi mục tiêu học, đưa vài câu ngắn để ước lượng trình độ, rồi ghi
             hồ sơ đầu tiên trước khi vào bài.
         """.trimIndent(),
-        toolIds = setOf(AgentCapability.WORKSPACE),
         greetings = listOf(
             "Hôm nay ta có một bài tiếng Anh vừa sức cho ngươi.",
             "Viết một câu tiếng Anh đi, ta sẽ xem kỹ từng chữ.",

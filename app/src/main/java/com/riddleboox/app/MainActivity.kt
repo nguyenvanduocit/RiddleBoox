@@ -62,6 +62,8 @@ import com.riddleboox.app.tools.DilibTools
 import com.riddleboox.app.tools.DiaryTools
 import com.riddleboox.app.tools.BooxNotesTools
 import com.riddleboox.app.tools.BooxNote
+import com.riddleboox.app.tools.DrawTools
+import com.riddleboox.app.tools.DrawingBoard
 import com.riddleboox.app.tools.MemoryTools
 import com.riddleboox.app.tools.OpenAiBooxNotesVisionReader
 import com.riddleboox.app.tools.StoredMemory
@@ -87,6 +89,9 @@ class MainActivity : Activity() {
 
     private val strokeStore = StrokeStore()
     private val refresher = EinkRefresher()
+
+    /** The seam the `draw` tool's figures cross to reach the page — one per activity, like the stores. */
+    private val drawingBoard = DrawingBoard()
     private lateinit var conversationStore: ConversationStore
     private lateinit var penSurface: SurfaceView
     private lateinit var regionView: RegionView
@@ -283,6 +288,7 @@ class MainActivity : Activity() {
             replySettings = replySettings,
             agent = selectedAgent,
             toolbox = agentToolbox(replySettings),
+            drawingBoard = drawingBoard,
             handwritingPlanner = handwritingPlanner,
             replyFontSizePx = replyFontSize.px,
             conversationStore = conversationStore,
@@ -481,16 +487,24 @@ class MainActivity : Activity() {
         true
     }.getOrDefault(false)
 
-    /** Capability composition is determined by the selected user-defined agent. */
+    /**
+     * Every agent's toolbox: a default set carried by all of them, plus the
+     * capabilities the selected agent's manifest opts into.
+     *
+     * The defaults — its own workspace files, its own long-term memory, and
+     * the pen to draw with — are senses of the diary itself, not capabilities:
+     * they are added here unconditionally, never consulted in a manifest, so a
+     * new default tool reaches every agent without any migration of agent.json
+     * files.
+     */
     private fun agentToolbox(replySettings: ReplySettings?): Toolbox {
         val boxes = buildList {
-            if (AgentCapability.WORKSPACE in selectedAgent.toolIds) {
-                add(WorkspaceTools(selectedAgent.workspace))
-                // A fresh id per toolbox build, not per turn: this is rebuilt
-                // exactly when a new evening starts (app open, agent switch),
-                // the same boundary RiddleStateMachine.conversationId uses.
-                add(MemoryTools(selectedAgent.workspace, conversationId = UUID.randomUUID().toString()))
-            }
+            add(WorkspaceTools(selectedAgent.workspace))
+            // A fresh id per toolbox build, not per turn: this is rebuilt
+            // exactly when a new evening starts (app open, agent switch),
+            // the same boundary RiddleStateMachine.conversationId uses.
+            add(MemoryTools(selectedAgent.workspace, conversationId = UUID.randomUUID().toString()))
+            add(DrawTools(drawingBoard))
             if (AgentCapability.LIBRARY in selectedAgent.toolIds) {
                 add(diaryTools())
             }

@@ -14,7 +14,7 @@ class AgentTextTest {
 
     private fun definition(
         description: String = "Một agent thử nghiệm.",
-        toolIds: Set<String> = setOf(AgentCapability.WORKSPACE, AgentCapability.LIBRARY),
+        toolIds: Set<String> = setOf(AgentCapability.LIBRARY),
         greetings: List<String> = listOf("Xin chào.", "Viết gì đó đi."),
         systemPrompt: String = "Bạn là một trợ lý hữu ích.",
     ) = AgentDefinition(
@@ -37,7 +37,7 @@ class AgentTextTest {
         val expected = """
             Tên: Trợ lý thử
             Mô tả: Một agent thử nghiệm.
-            Tools: workspace, library
+            Tools: library
 
             Greetings:
             - Xin chào.
@@ -66,8 +66,7 @@ class AgentTextTest {
 
     @Test
     fun `empty toolIds does not crash and prints an empty tools line`() {
-        // Not a real-world shape — AgentDefinition.toolIds always carries at
-        // least AgentCapability.WORKSPACE — but toPlainText must not assume it.
+        // The default shape now: an agent with no opted-in capability at all.
         val manifest = AgentManifest(
             id = "bare",
             name = "Trần trụi",

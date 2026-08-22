@@ -28,7 +28,7 @@ class AgentCapabilitiesTest {
         assertTrue(AgentCapability.BOOX_NOTES in store.load("notes")!!.toolIds)
         assertTrue(AgentCapability.AGENT_MANAGEMENT in store.load("agent-manager")!!.toolIds)
         assertThrows(IllegalStateException::class.java) {
-            store.update("agent-manager", tools = setOf(AgentCapability.WORKSPACE))
+            store.update("agent-manager", tools = setOf(AgentCapability.LIBRARY))
         }
         assertTrue(AgentCapability.AGENT_MANAGEMENT in store.load("agent-manager")!!.toolIds)
 

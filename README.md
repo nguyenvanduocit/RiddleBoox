@@ -45,10 +45,20 @@ Mỗi agent có bộ greeting riêng được lưu trong `agent.json`. Khi tạo
 câu trên một dòng trong trường `greetings`; khi mở trang mới, app chọn ngẫu nhiên từ đúng bộ
 của agent đang được chọn và tránh lặp lại câu vừa dùng.
 
-Tool được cấp theo capability của từng agent. Mặc định `chat` chỉ có workspace; `notes` có
-thêm `boox_notes`; `library` có thêm tool thư viện và `dilib`; chỉ `agent-manager` built-in có capability
+Mọi agent đều mang sẵn **bộ tool mặc định** — workspace, memory và `draw` (vẽ hình) — được
+inject vô điều kiện trong `MainActivity.agentToolbox`, không cần khai trong `agent.json` và
+không tắt được. Ngoài bộ đó, tool được cấp theo capability của từng agent: `notes` có thêm
+`boox_notes`; `library` có thêm tool thư viện và `dilib`; chỉ `agent-manager` built-in có capability
 `agent_management`. Model chỉ nhận descriptor của capability được cấp nên các agent khác
 không biết những tool không thuộc vai trò của mình tồn tại.
+
+Tool `draw` nhận SVG (path/line/rect/circle/ellipse/polyline/polygon, có transform; không
+text/CSS/image) và vẽ hình lên trang bằng chính nét bút của diary: `handwriting/SvgInk.kt`
+parse + flatten thành polyline thuần Kotlin, `WriteCursor.placeFigure` tự chọn vị trí (dưới
+dòng đang viết), tự scale (tối đa ~1/3 trang, căn giữa, luôn chừa một dòng chữ bên dưới) và
+decimate điểm theo tốc độ reveal. Trang gần hết chỗ thì hình bị bỏ qua (log warning) — model
+đã được dặn là trang tự quyết. Hình không đi vào transcript nên resume một cuộc trò chuyện cũ
+chỉ vẽ lại phần chữ.
 
 Workspace tools an toàn gồm list, read, write, append, edit, delete, mkdir, stat, filename
 search, grep và regex search. Path traversal, absolute path, symlink thoát khỏi workspace và

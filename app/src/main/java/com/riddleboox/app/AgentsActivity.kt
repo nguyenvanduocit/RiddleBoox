@@ -149,10 +149,10 @@ class AgentsActivity : Activity() {
         }
         val nameField = input("tên", template?.name.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
         val descriptionField = input("mô tả", template?.description.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
-        val selectedTools = (template?.toolIds ?: setOf(AgentCapability.WORKSPACE)).toMutableSet()
+        val selectedTools = (template?.toolIds ?: emptySet()).toMutableSet()
         form.addView(caption("tools (chọn capability)").apply { setPadding(0, dp(10), 0, dp(2)) })
         form.addView(toolTags(selectedTools))
-        form.addView(caption("workspace luôn bật · agent_management chỉ dành cho agent quản lý mặc định.").apply {
+        form.addView(caption("workspace, trí nhớ và vẽ hình luôn bật cho mọi agent · agent_management chỉ dành cho agent quản lý mặc định.").apply {
             textSize = 13f
             setTextColor(Color.DKGRAY)
             setPadding(0, dp(4), 0, dp(2))
@@ -252,25 +252,22 @@ class AgentsActivity : Activity() {
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         gravity = android.view.Gravity.CENTER
         setPadding(dp(8), dp(8), dp(8), dp(8))
-        isClickable = !option.locked
-        isFocusable = !option.locked
-        refreshToolTag(this, option.id in selected, option.locked)
-        if (!option.locked) {
-            setOnClickListener {
-                if (!selected.add(option.id)) selected.remove(option.id)
-                refreshToolTag(this, option.id in selected, option.locked)
-            }
+        isClickable = true
+        isFocusable = true
+        refreshToolTag(this, option.id in selected)
+        setOnClickListener {
+            if (!selected.add(option.id)) selected.remove(option.id)
+            refreshToolTag(this, option.id in selected)
         }
     }
 
-    private fun refreshToolTag(tag: TextView, selected: Boolean, locked: Boolean) {
+    private fun refreshToolTag(tag: TextView, selected: Boolean) {
         tag.setTextColor(if (selected) Color.WHITE else Color.BLACK)
         tag.background = GradientDrawable().apply {
             cornerRadius = dp(4).toFloat()
             setColor(if (selected) Color.BLACK else Color.WHITE)
             setStroke(dp(1), Color.BLACK)
         }
-        tag.alpha = if (locked) 0.7f else 1f
     }
 
     private fun parseGreetings(value: String): List<String> = value
@@ -318,10 +315,9 @@ class AgentsActivity : Activity() {
     }
 
     companion object {
-        private data class ToolOption(val id: String, val label: String, val locked: Boolean = false)
+        private data class ToolOption(val id: String, val label: String)
 
         private val TOOL_OPTIONS = listOf(
-            ToolOption(AgentCapability.WORKSPACE, "workspace", locked = true),
             ToolOption(AgentCapability.LIBRARY, "library"),
             ToolOption(AgentCapability.DILIB, "dilib"),
             ToolOption(AgentCapability.BOOX_NOTES, "boox_notes"),
