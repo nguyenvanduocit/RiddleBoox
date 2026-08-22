@@ -21,6 +21,7 @@ import com.riddleboox.app.agent.AgentDefinition
 import com.riddleboox.app.agent.AgentSelectionStore
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.agent.toPlainText
+import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
@@ -280,8 +281,14 @@ class AgentsActivity : Activity() {
         .toList()
 
     private fun confirmDelete(agent: AgentDefinition) {
+        val memoryCount = readMemories(agent.workspace).size
+        val message = if (memoryCount > 0) {
+            "Xóa ${agent.name}? $memoryCount điều đã nhớ sẽ mất theo. Không lấy lại được."
+        } else {
+            "Xóa ${agent.name} và toàn bộ workspace riêng của agent này?"
+        }
         AlertDialog.Builder(this)
-            .setMessage("Xóa ${agent.name} và toàn bộ workspace riêng của agent này?")
+            .setMessage(message)
             .setNegativeButton("thôi", null)
             .setPositiveButton("xóa") { _, _ ->
                 store.delete(agent.id)
