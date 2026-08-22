@@ -71,6 +71,11 @@ private val TURN_PROTOCOL = """
     request. If a tool is available for the request, call it before writing the
     final answer and base that answer on the tool result.
 
+    A chemical formula or a math expression with a subscript or exponent in
+    that visible answer must be written as inline LaTeX: \( ... \), with `_`
+    for subscript and `^` for superscript — e.g. \( \mathrm{H_2O} \), \( x^2
+    \). Nothing else you write is LaTeX; only a formula or an exponent is.
+
     Then, on a new line, write exactly $TURN_SEPARATOR and nothing else on that line.
     After it, transcribe verbatim what was written on the page, in the language it
     was written in — nothing else, no commentary. Leave it empty if nothing legible

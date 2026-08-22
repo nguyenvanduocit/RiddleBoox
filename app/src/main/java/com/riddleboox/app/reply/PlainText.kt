@@ -12,13 +12,18 @@ package com.riddleboox.app.reply
  * Deliberately not a markdown parser. Only the marks that actually turn up in
  * conversational replies are handled, and only when they wrap something —
  * `2 * 3` and a lone hyphen stay exactly as written.
+ *
+ * Chemical formulas and math exponents get the same treatment, once the
+ * marks are stripped — see [mathChemNotation]. Both problems are "the model
+ * writes ASCII, the page should show the symbol", so they share this one
+ * seam every caller of [plainText] already goes through.
  */
 fun plainText(reply: String): String {
     var text = reply
     for (mark in MARKS) {
         text = mark.replace(text) { match -> match.groupValues[1] }
     }
-    return text.trim()
+    return mathChemNotation(text.trim())
 }
 
 /**
