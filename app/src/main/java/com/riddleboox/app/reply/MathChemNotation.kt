@@ -25,13 +25,26 @@ package com.riddleboox.app.reply
  *
  *  - **LaTeX wrapping** ([stripLatexWrappers]): `\(...\)` and `\[...\]`
  *    delimiters are dropped, `\mathrm{...}` and `\text{...}` keep their
- *    content and lose the command. Nothing else — `\frac`, `\sqrt`, Greek
- *    letters are a real gap, left for whenever a reply is caught reaching
- *    for them.
+ *    content and lose the command.
+ *  - **Fractions and roots** ([toFractions], [toRoots]): `\frac{1}{3}`
+ *    becomes `1/3`, `\sqrt{2}` becomes `√(2)` — a hand has no way to stack a
+ *    fraction or draw a radical's vinculum on a line of ink, so both fall
+ *    back to the way they'd be said out loud rather than the way they'd be
+ *    typeset. The parens around a root's argument are the same reasoning
+ *    `(a+b)/c` would need for a fraction with an expression on top: without
+ *    them the line after the root reads as outside it.
+ *  - **Symbol commands** ([toSymbols]): the zero-argument names that turn
+ *    up asking about calculus — `\int`, `\sum`, `\lim`, `\infty`, `\to`,
+ *    `\pi` and the rest of [SYMBOL_COMMANDS] — each is one Unicode
+ *    character LaTeX would have typeset it as anyway.
  *  - **Explicit subscript/superscript** ([toSubscript], [toSuperscript]):
  *    `_2`, `_{12}` and `^2`, `^{-3}` — LaTeX's own markers, which the model
  *    used for subscript and already used correctly for superscript before
- *    this file's exponent handling existed.
+ *    this file's exponent handling existed. Digits only: `\lim_{x \to 0}`'s
+ *    subscript is a whole sub-expression, not a digit run, and Unicode has
+ *    no general run of subscript letters to fall back to the way superscript
+ *    digits do — a real gap, left for whenever a reply is caught reaching
+ *    for one.
  *  - A bare **formula** ([toChemFormulas]), for a reply that skips LaTeX
  *    entirely: a `\b`-bounded word made only of element-symbol fragments —
  *    one capital letter, at most one lowercase, at most three trailing
@@ -44,7 +57,13 @@ package com.riddleboox.app.reply
  *    a digit run to stop at early.
  */
 fun mathChemNotation(text: String): String =
-    toSuperscript(toChemFormulas(toSubscript(stripLatexWrappers(text))))
+    toSuperscript(
+        toChemFormulas(
+            toSubscript(
+                toSymbols(toRoots(toFractions(stripLatexWrappers(text)))),
+            ),
+        ),
+    )
 
 private val MATHRM = Regex("""\\(?:mathrm|text)\{([^}]*)\}""")
 private val OPEN_DELIM = Regex("""\\[(\[]\s*""")
@@ -53,6 +72,38 @@ private val CLOSE_DELIM = Regex("""\s*\\[)\]]""")
 private fun stripLatexWrappers(text: String): String {
     val unwrapped = MATHRM.replace(text) { it.groupValues[1] }
     return CLOSE_DELIM.replace(OPEN_DELIM.replace(unwrapped, ""), "")
+}
+
+private val FRAC = Regex("""\\frac\{([^{}]*)\}\{([^{}]*)\}""")
+
+private fun toFractions(text: String): String = FRAC.replace(text) { match ->
+    "${parenthesizeIfCompound(match.groupValues[1])}/${parenthesizeIfCompound(match.groupValues[2])}"
+}
+
+/** `1` stays `1`; `a+b` becomes `(a+b)` — a bare term needs no help reading as one. */
+private fun parenthesizeIfCompound(term: String): String =
+    if (term.any { it in "+-*/ " }) "($term)" else term
+
+private val SQRT = Regex("""\\sqrt\{([^{}]*)\}""")
+
+private fun toRoots(text: String): String = SQRT.replace(text) { match -> "√(${match.groupValues[1]})" }
+
+private val SYMBOL_COMMANDS = mapOf(
+    "int" to "∫", "sum" to "∑", "lim" to "lim", "infty" to "∞",
+    "rightarrow" to "→", "to" to "→",
+    "pi" to "π", "theta" to "θ", "alpha" to "α", "beta" to "β", "gamma" to "γ", "delta" to "δ",
+    "cdot" to "·", "times" to "×", "pm" to "±", "approx" to "≈",
+    "leq" to "≤", "le" to "≤", "geq" to "≥", "ge" to "≥", "neq" to "≠",
+)
+
+// Not `\b`: a command's own closing boundary is "no more letters", not "no
+// more word characters" — `\sum_{i=1}` has `_` right after the command name,
+// and `_`/digits count as word characters too, so `\b` would refuse to match
+// there and leave `\sum` untouched right when a subscript follows it.
+private val SYMBOL_COMMAND = Regex("""\\(${SYMBOL_COMMANDS.keys.joinToString("|")})(?![a-zA-Z])""")
+
+private fun toSymbols(text: String): String = SYMBOL_COMMAND.replace(text) { match ->
+    SYMBOL_COMMANDS.getValue(match.groupValues[1])
 }
 
 private val SUBSCRIPT_MARK = Regex("""_(?:\{(\d+)\}|(\d))""")

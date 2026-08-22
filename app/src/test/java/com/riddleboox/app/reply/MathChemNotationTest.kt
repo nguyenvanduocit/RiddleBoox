@@ -98,4 +98,55 @@ class MathChemNotationTest {
     fun `braced exponents are superscripted too`() {
         assertEquals("10⁻²³", mathChemNotation("""10^{-23}"""))
     }
+
+    /**
+     * Verbatim from the device: a fraction was the one shape the first pass
+     * of this file didn't cover — asked for a derivative and an integral,
+     * the exponent rendered fine but `\frac{1}{3}` reached the page as
+     * literal backslashes and braces.
+     */
+    @Test
+    fun `the fraction that was missed renders as division, not its LaTeX source`() {
+        assertEquals(
+            "Đạo hàm của x² là 2x. Tích phân của x² từ 0 đến 1 bằng 1/3.",
+            mathChemNotation(
+                """Đạo hàm của x^2 là 2x. Tích phân của x^2 từ 0 đến 1 bằng \frac{1}{3}.""",
+            ),
+        )
+    }
+
+    @Test
+    fun `a fraction with an expression on either side keeps its shape`() {
+        assertEquals("(a+b)/c", mathChemNotation("""\frac{a+b}{c}"""))
+    }
+
+    @Test
+    fun `a square root gets a radical sign and parens around its argument`() {
+        assertEquals("√(2)", mathChemNotation("""\sqrt{2}"""))
+        assertEquals("√(x+1)", mathChemNotation("""\sqrt{x+1}"""))
+    }
+
+    @Test
+    fun `calculus and common symbol commands become their Unicode character`() {
+        assertEquals("∫ x² dx", mathChemNotation("""\int x^2 dx"""))
+        assertEquals("lim", mathChemNotation("""\lim"""))
+        assertEquals("x → ∞", mathChemNotation("""x \to \infty"""))
+        assertEquals("π ≈ 3.14", mathChemNotation("""\pi \approx 3.14"""))
+        assertEquals("2 × 3 ≤ 10", mathChemNotation("""2 \times 3 \leq 10"""))
+    }
+
+    @Test
+    fun `the symbol still converts around a subscript that is not a plain digit`() {
+        // \sum's own digit-only super/subscript (\sum_1^n) is already covered
+        // by toSubscript/toSuperscript; \sum_{i=1}^{n} is the documented gap
+        // — the braces stay, but the symbol itself is not lost to it.
+        assertEquals("∑_{i=1}^{n} i", mathChemNotation("""\sum_{i=1}^{n} i"""))
+    }
+
+    @Test
+    fun `a subscript that is not a plain digit is a documented gap, left alone`() {
+        // \lim_{x \to 0} — the symbol and the arrow inside still convert; the
+        // braced sub-expression itself has no digit-only shape to match.
+        assertEquals("lim_{x → 0} f(x)", mathChemNotation("""\lim_{x \to 0} f(x)"""))
+    }
 }
