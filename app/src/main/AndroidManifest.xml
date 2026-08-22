@@ -60,6 +60,16 @@
             android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
             android:windowSoftInputMode="adjustResize"
             android:exported="false" />
+        <!--
+            Not started from anywhere yet — see LockActivity.kt's class doc.
+            Registered ahead of being wired so the screen builds and packages
+            on its own; MainActivity does not hold this Activity's class name.
+        -->
+        <activity
+            android:name=".settings.LockActivity"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false" />
         <activity
             android:name=".AgentsActivity"
             android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
