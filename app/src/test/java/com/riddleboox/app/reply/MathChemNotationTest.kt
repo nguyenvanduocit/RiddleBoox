@@ -155,12 +155,13 @@ class MathChemNotationTest {
     }
 
     @Test
-    fun `a braced subscript keeps a character with no small form at full size`() {
-        // \lim_{x \to 0} — the other real reply. 'x' converts; the arrow
-        // (already → by the time toSubscript runs) and the space around it
-        // have no subscript form, so both stay exactly as written, at full
-        // size, inside the run.
-        assertEquals("limₓ → ₀ f(x)", mathChemNotation("""\lim_{x \to 0} f(x)"""))
+    fun `a braced subscript with an unmapped character is left whole for the raster, not partially converted`() {
+        // \lim_{x \to 0} — the other real reply. 'x' has a subscript form
+        // but the arrow (already → by the time toSubscript runs) and the
+        // space around it don't, so the whole run — brace, underscore and
+        // all — is left untouched rather than only 'x' converting: internal
+        // spaces still get collapsed so it survives as one word downstream.
+        assertEquals("lim_{x→0} f(x)", mathChemNotation("""\lim_{x \to 0} f(x)"""))
     }
 
     @Test
@@ -169,7 +170,7 @@ class MathChemNotationTest {
         // (widening it would also catch snake_case_name's own underscore and
         // a^b^c's own caret — see SUBSCRIPT_MARK/EXPONENT's own comment).
         // x_{i} or x^{n}, braced, is what reaches the small form instead —
-        // see the two tests above.
+        // see the tests above and below.
         assertEquals("x_i", mathChemNotation("x_i"))
         assertEquals("x^n", mathChemNotation("x^n"))
     }
@@ -263,10 +264,12 @@ class MathChemNotationTest {
     }
 
     @Test
-    fun `eulers identity renders with only the characters that have a superscript form raised`() {
+    fun `eulers identity keeps its exponent whole for the raster, since pi has no superscript glyph`() {
         // e^{i\pi}+1=0 — \pi converts to π first (toSymbols runs before
-        // toSuperscript in one pass); π itself has no superscript glyph in
-        // Unicode, so it stays full-size right after the raised i.
-        assertEquals("eⁱπ+1=0", mathChemNotation("""e^{i\pi}+1=0"""))
+        // toSuperscript in one pass), but π itself has no superscript glyph
+        // in Unicode, so the run is left as ^{iπ} rather than raising only
+        // the i — ScriptAwareTextRaster renders the whole "iπ" smaller and
+        // raised together instead.
+        assertEquals("e^{iπ}+1=0", mathChemNotation("""e^{i\pi}+1=0"""))
     }
 }

@@ -60,14 +60,19 @@ package com.riddleboox.app.reply
  *    `\qquad` four times on one page, always to separate one formula from
  *    the next.
  *  - **Subscript/superscript** ([toSubscript], [toSuperscript]): `_2`,
- *    `_{12}`, `_{i=1}`, `_x` and their `^` counterparts. Converted one
- *    character at a time through [SUBSCRIPT_CHARS]/[SUPERSCRIPT_CHARS] —
- *    Unicode has a small glyph for most digits and roughly half the Latin
- *    alphabet, not for the rest (no letter `q`, no Greek at either size,
- *    most capitals), so a character with no small form is kept at full size
- *    rather than dropped or guessed at: `e^{iπ}` comes out `eⁱπ` — the `i`
- *    raised, the `π` not — not `eiπ` with the exponent's own shape lost, and
- *    not `e^{iπ}` with the brace still showing.
+ *    `_{12}`, `_{i=1}`, `_x` and their `^` counterparts, converted through
+ *    [SUBSCRIPT_CHARS]/[SUPERSCRIPT_CHARS] to Unicode's own small forms —
+ *    but only when *every* character in the run has one. Unicode covers
+ *    most digits and roughly half the Latin alphabet, not Greek or most
+ *    capitals, and converting what it can while leaving the rest at full
+ *    size reads worse than not converting at all — one character taller
+ *    than its neighbour for no reason a reader could see. A run with
+ *    anything unmapped in it — `_{x → 0}`, `^{iπ}` — is left completely
+ *    untouched instead, brace and all (only [collapseScriptSpaces] still
+ *    touches it, to keep it one word): that is exactly the shape
+ *    [com.riddleboox.app.handwriting.ScriptAwareTextRaster] looks for
+ *    downstream, and *it* has no such gap — a smaller, offset rendering of
+ *    the actual glyphs works for any character, Greek included.
  *  - A bare **formula** ([toChemFormulas]), for a reply that skips LaTeX
  *    entirely: a `\b`-bounded word made only of element-symbol fragments —
  *    one capital letter, at most one lowercase, at most three trailing
@@ -93,10 +98,12 @@ fun mathChemNotation(text: String): String {
 private const val MAX_PASSES = 6
 
 private fun singlePass(text: String): String =
-    toSuperscript(
-        toChemFormulas(
-            toSubscript(
-                toSymbols(toRoots(toFractions(stripLatexWrappers(text)))),
+    collapseScriptSpaces(
+        toSuperscript(
+            toChemFormulas(
+                toSubscript(
+                    toSymbols(toRoots(toFractions(stripLatexWrappers(text)))),
+                ),
             ),
         ),
     )
@@ -253,13 +260,49 @@ private val SUPERSCRIPT_CHARS = mapOf(
     'z' to 'ᶻ',
 )
 
+// All-or-nothing on the braced form: a bare digit is always in the map (the
+// regex guarantees it), but `_{x → 0}`'s content mixes a mapped `x` with an
+// unmapped space and arrow. Converting what can be converted and leaving the
+// rest is what the very first version of this function did, and it read as
+// "eⁱπ" — only the `i` raised, the `π` sitting plain-size right after it,
+// one character taller than its neighbour for no reason a reader could see.
+// Left untouched instead — brace, marker and all — a token still carrying
+// `_{...}`/`^{...}` is exactly what [com.riddleboox.app.handwriting.ScriptAwareTextRaster] looks for: it
+// renders the *whole* run smaller and offset, not character by character,
+// so `eⁱπ` becomes a properly small, properly raised `iπ` together.
 private fun toSubscript(text: String): String = SUBSCRIPT_MARK.replace(text) { match ->
-    (match.groupValues[1].ifEmpty { match.groupValues[2] }).map { SUBSCRIPT_CHARS[it] ?: it }.joinToString("")
+    val bare = match.groupValues[2]
+    if (bare.isNotEmpty()) {
+        bare.map { SUBSCRIPT_CHARS[it] ?: it }.joinToString("")
+    } else {
+        val mapped = match.groupValues[1].map { SUBSCRIPT_CHARS[it] }
+        if (mapped.any { it == null }) match.value else mapped.joinToString("") { it.toString() }
+    }
 }
 
 private fun toSuperscript(text: String): String = EXPONENT.replace(text) { match ->
-    (match.groupValues[1].ifEmpty { match.groupValues[2] }).map { SUPERSCRIPT_CHARS[it] ?: it }.joinToString("")
+    val bare = match.groupValues[2]
+    if (bare.isNotEmpty()) {
+        bare.map { SUPERSCRIPT_CHARS[it] ?: it }.joinToString("")
+    } else {
+        val mapped = match.groupValues[1].map { SUPERSCRIPT_CHARS[it] }
+        if (mapped.any { it == null }) match.value else mapped.joinToString("") { it.toString() }
+    }
 }
+
+/**
+ * The one adjustment made for [com.riddleboox.app.handwriting.ScriptAwareTextRaster]'s benefit rather than
+ * the page's: a `_{...}`/`^{...}` left untouched by [toSubscript]/
+ * [toSuperscript] above still has its own internal spaces (`_{x → 0}`), and
+ * [com.riddleboox.app.handwriting.WriteCursor] tokenizes a reply on
+ * whitespace before any raster ever sees it — spaces inside the braces
+ * would split what has to arrive as one word into several. Stripping them
+ * changes nothing a reader would notice: `lim_{x→0}` is the ordinary way to
+ * write that bound anyway, not `lim_{x → 0}`.
+ */
+private val BRACED_SCRIPT = Regex("""[_^]\{[^{}]*\}""")
+
+private fun collapseScriptSpaces(text: String): String = BRACED_SCRIPT.replace(text) { it.value.replace(" ", "") }
 
 private val FORMULA = Regex("""\b(?:[A-Z][a-z]?\d{0,3})+\b""")
 
