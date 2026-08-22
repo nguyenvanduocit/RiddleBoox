@@ -17,10 +17,12 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.tools.MemoryEntry
 import com.riddleboox.app.tools.matching
 import com.riddleboox.app.tools.readMemories
+import com.riddleboox.app.tools.toPlainText
 import com.riddleboox.app.tools.writeMemories
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
@@ -93,7 +95,7 @@ class MemoriesActivity : Activity() {
             )
             addView(column)
         }
-        setContentView(paperPage(runningHead("$agentName · đã nhớ"), body))
+        setContentView(paperPage(runningHead("$agentName · đã nhớ", "xuất tất cả", onAction = { exportAll() }), body))
     }
 
     override fun onResume() {
@@ -247,6 +249,32 @@ class MemoriesActivity : Activity() {
         writeMemories(ws, readMemories(ws).filterNot { it.id == entry.id })
         allEntries = loadEntries()
         show(allEntries.matching(searchField.text?.toString().orEmpty()))
+    }
+
+    /**
+     * Writes every memory for [agentId] out as one plain-text file under
+     * `cacheDir/exports` and hands it to the share sheet — the same shape as
+     * [com.riddleboox.app.history.HistoryActivity.exportAll], the diary's own
+     * "xuất tất cả".
+     *
+     * Re-reads [workspace] rather than [allEntries], for the same reason
+     * [com.riddleboox.app.history.HistoryActivity.exportAll] re-reads its
+     * store: a tap on "xuất tất cả" a while after the screen opened should
+     * export what's on disk right now.
+     */
+    private fun exportAll() {
+        val ws = workspace ?: return
+        val exportsDir = File(cacheDir, "exports").apply { mkdirs() }
+        val file = File(exportsDir, "memories-$agentId.txt")
+        file.writeText(readMemories(ws).sortedByDescending { it.ms }.toPlainText())
+
+        val uri = FileProvider.getUriForFile(this, "$packageName.onyx.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "Chia sẻ những điều đã nhớ"))
     }
 
     companion object {
