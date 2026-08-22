@@ -14,6 +14,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.riddleboox.app.settings.TranscriptFontSize
+import com.riddleboox.app.settings.TranscriptFontSizeStore
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
@@ -42,10 +44,14 @@ class TranscriptActivity : Activity() {
     private lateinit var store: ConversationStore
     private lateinit var conversationId: String
 
+    /** Sp size for [written] and [answered] — see [TranscriptFontSize], independent of the diary's own hand. */
+    private var fontSizeSp: Float = TranscriptFontSize.Default.sp
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         openPaperWindow()
 
+        fontSizeSp = TranscriptFontSizeStore(this).read().sp
         store = ConversationStore(this)
         conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty()
         val conversation = store.load(conversationId)
@@ -69,7 +75,7 @@ class TranscriptActivity : Activity() {
     /** What the writer wrote, upright and flush left, the way it sat on the page. */
     private fun written(transcript: String): TextView = TextView(this).apply {
         text = transcript.ifBlank { "(mực nhoè)" }
-        textSize = 19f
+        textSize = fontSizeSp
         typeface = Typeface.SERIF
         setTextColor(Color.BLACK)
         setPadding(0, dp(28), 0, 0)
@@ -79,7 +85,7 @@ class TranscriptActivity : Activity() {
     /** The diary's own hand: italic and indented, so a glance tells the voices apart. */
     private fun answered(reply: String): TextView = TextView(this).apply {
         text = reply
-        textSize = 19f
+        textSize = fontSizeSp
         setTypeface(Typeface.SERIF, Typeface.ITALIC)
         setTextColor(Color.BLACK)
         setPadding(dp(24), dp(10), 0, 0)

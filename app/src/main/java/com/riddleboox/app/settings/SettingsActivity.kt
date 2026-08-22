@@ -36,23 +36,27 @@ class SettingsActivity : Activity() {
 
     private lateinit var store: SettingsStore
     private lateinit var fontSizeStore: ReplyFontSizeStore
+    private lateinit var transcriptFontSizeStore: TranscriptFontSizeStore
     private lateinit var sendModeStore: SendModeStore
     private lateinit var defaults: ReplySettings
 
     /** What was on the page when it opened — the thing [dirty] compares against. */
     private lateinit var loaded: ReplySettings
     private var loadedFontSize: ReplyFontSize = ReplyFontSize.Default
+    private var loadedTranscriptFontSize: TranscriptFontSize = TranscriptFontSize.Default
     private var loadedSendMode: SendMode = SendMode.Auto
     private lateinit var baseUrlField: EditText
     private lateinit var apiKeyField: EditText
     private lateinit var modelField: TextView
     private lateinit var fontSizeField: TextView
+    private lateinit var transcriptFontSizeField: TextView
     private lateinit var sendModeField: TextView
     private lateinit var libraryField: TextView
     private lateinit var pinStore: PinStore
     private lateinit var pinField: TextView
     private var chosenModel: String = ""
     private var chosenFontSize: ReplyFontSize = ReplyFontSize.Default
+    private var chosenTranscriptFontSize: TranscriptFontSize = TranscriptFontSize.Default
     private var chosenSendMode: SendMode = SendMode.Auto
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,6 +92,12 @@ class SettingsActivity : Activity() {
         chosenFontSize = currentFontSize
         fontSizeField = chooserField(currentFontSize.label) { pickFontSize() }
 
+        transcriptFontSizeStore = TranscriptFontSizeStore(this)
+        val currentTranscriptFontSize = transcriptFontSizeStore.read()
+        loadedTranscriptFontSize = currentTranscriptFontSize
+        chosenTranscriptFontSize = currentTranscriptFontSize
+        transcriptFontSizeField = chooserField(currentTranscriptFontSize.label) { pickTranscriptFontSize() }
+
         sendModeStore = SendModeStore(this)
         val currentSendMode = sendModeStore.read()
         loadedSendMode = currentSendMode
@@ -105,13 +115,14 @@ class SettingsActivity : Activity() {
             addView(field("api key", apiKeyField))
             addView(field("model", modelField))
             addView(field("cỡ chữ trả lời", fontSizeField))
+            addView(field("cỡ chữ đọc lại", transcriptFontSizeField))
             addView(field("chế độ gửi", sendModeField))
             addView(field("sách trên máy", libraryField))
             // Không tự finish() ở đây — gọi lại save() để không đánh mất các
             // field khác đang sửa dở trên cùng màn hình. save() lưu luôn mọi
-            // field khác trên màn hình này (base url, api key, model, cỡ chữ,
-            // chế độ gửi), không chỉ riêng cờ onboarding — có chủ đích, không
-            // phải side effect ngoài ý muốn.
+            // field khác trên màn hình này (base url, api key, model, cỡ chữ
+            // trả lời, cỡ chữ đọc lại, chế độ gửi), không chỉ riêng cờ
+            // onboarding — có chủ đích, không phải side effect ngoài ý muốn.
             addView(field("giới thiệu", chooserField("chạm để xem lại") {
                 onboardingStore.write(false)
                 save()
@@ -160,6 +171,7 @@ class SettingsActivity : Activity() {
             apiKeyField.text.toString() != loaded.apiKey ||
             chosenModel != loaded.model ||
             chosenFontSize != loadedFontSize ||
+            chosenTranscriptFontSize != loadedTranscriptFontSize ||
             chosenSendMode != loadedSendMode
 
     /**
@@ -210,6 +222,7 @@ class SettingsActivity : Activity() {
             ).sanitized(defaults),
         )
         fontSizeStore.write(chosenFontSize)
+        transcriptFontSizeStore.write(chosenTranscriptFontSize)
         sendModeStore.write(chosenSendMode)
         setResult(RESULT_OK)
         finish()
@@ -252,6 +265,23 @@ class SettingsActivity : Activity() {
             .setSingleChoiceItems(labels, choices.indexOf(chosenFontSize)) { dialog, which ->
                 chosenFontSize = choices[which]
                 fontSizeField.text = chosenFontSize.label
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    /**
+     * Presets for the read-back screen, independent of [pickFontSize]: that
+     * one sizes rasterized ink in px, this one sizes a plain `TextView` in sp.
+     */
+    private fun pickTranscriptFontSize() {
+        val choices = TranscriptFontSize.entries
+        val labels = choices.map { it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("cỡ chữ đọc lại")
+            .setSingleChoiceItems(labels, choices.indexOf(chosenTranscriptFontSize)) { dialog, which ->
+                chosenTranscriptFontSize = choices[which]
+                transcriptFontSizeField.text = chosenTranscriptFontSize.label
                 dialog.dismiss()
             }
             .show()
