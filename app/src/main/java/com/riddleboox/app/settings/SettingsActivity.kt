@@ -229,11 +229,14 @@ class SettingsActivity : Activity() {
     }
 
     /**
-     * The model is chosen, not typed: these are provider-qualified ids like
+     * The shortlist is the fast path: these are provider-qualified ids like
      * `openai/gpt-5.6-luna`, and hand-typing one on a stylus tablet is how a
-     * working setup turns into a 404 over a single character. Tapping opens
-     * the shortlist; what is picked is remembered in [chosenModel] because a
+     * working setup turns into a 404 over a single character. Tapping a row
+     * chooses it; what is picked is remembered in [chosenModel] because a
      * TextView has no text to read back on save the way an EditText does.
+     * The neutral button opens [promptCustomModel] for the one case the
+     * shortlist can't cover — a model too new to have been added yet, or a
+     * self-hosted one.
      */
     private fun pickModel() {
         val choices = modelChoices(chosenModel)
@@ -244,12 +247,38 @@ class SettingsActivity : Activity() {
                 choose(choices[which])
                 dialog.dismiss()
             }
+            .setNeutralButton("nhập tay…") { _, _ -> promptCustomModel() }
             .show()
     }
 
     private fun choose(model: VisionModel) {
         chosenModel = model.id
         modelField.text = model.id
+    }
+
+    /**
+     * The escape hatch [pickModel] can't offer: a model id typed by hand for
+     * whatever isn't on the shortlist yet. No [VisionModel] backs it — there
+     * is no label or note to show, only the id the writer typed — so it
+     * writes straight into [chosenModel] the way [choose] writes `model.id`.
+     * Prefilled with the current id so re-opening this to tweak one character
+     * doesn't require retyping the whole thing; an empty submission is
+     * treated as "changed my mind" and leaves [chosenModel] untouched.
+     */
+    private fun promptCustomModel() {
+        val input = valueField(chosenModel, InputType.TYPE_CLASS_TEXT)
+        AlertDialog.Builder(this)
+            .setTitle("model")
+            .setView(input)
+            .setNegativeButton("thôi", null)
+            .setPositiveButton("dùng") { _, _ ->
+                val id = input.text.toString().trim()
+                if (id.isNotEmpty()) {
+                    chosenModel = id
+                    modelField.text = id
+                }
+            }
+            .show()
     }
 
     /**
