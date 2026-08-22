@@ -62,7 +62,9 @@ import java.util.Locale
  * [onResume] last read, unnarrowed, and [searchField] filters it in memory
  * on every keystroke via [com.riddleboox.app.tools.matching] rather than
  * re-reading the store — a memory list grows the same way a history does,
- * and deserves the same way back to one entry in it.
+ * and deserves the same way back to one entry in it. A "xoá" caption beside
+ * the field appears only once there is text to clear, so getting back to
+ * the full list never requires deleting a query by hand.
  */
 class MemoriesActivity : Activity() {
 
@@ -83,11 +85,10 @@ class MemoriesActivity : Activity() {
         agentId = intent.getStringExtra(EXTRA_AGENT_ID).orEmpty()
         agentName = intent.getStringExtra(EXTRA_AGENT_NAME).orEmpty()
         column = textBlock()
-        searchField = searchField()
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(
-                searchField,
+                searchRow(),
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT),
             )
             addView(column)
@@ -104,31 +105,57 @@ class MemoriesActivity : Activity() {
     }
 
     /**
-     * The search box itself: kept out of [column] so [show]'s `removeAllViews`
-     * never touches it, sitting above the entries it narrows.
+     * The search box plus its clear button: kept out of [column] so [show]'s
+     * `removeAllViews` never touches either, sitting above the entries
+     * [searchField] narrows.
      *
      * Same input-field styling as [com.riddleboox.app.history.HistoryActivity]'s
-     * `searchField` — transparent background, black text, no border, the
-     * same [dp]`(48)` left/right inset since it sits beside [column] in
-     * `body` rather than inside it, so it has no padded parent to inherit
-     * that inset from.
+     * `searchField` — transparent background, black text, no border. The
+     * same [dp]`(48)` left/right inset now splits between the two views
+     * instead of living on [searchField] alone: the field carries it on the
+     * left, the row itself carries it on the right, so the margin holds
+     * steady whether or not "xoá" is showing rather than collapsing when a
+     * `GONE` view drops its own padding.
+     *
+     * "xoá" is a [caption] rather than a bespoke icon button — no image
+     * assets in this app, and a caption is already how every other action
+     * in the chrome (see [com.riddleboox.app.ui.runningHead]) reads on
+     * BOOX's panel. It starts `GONE` and only turns `VISIBLE` once there is
+     * a query to clear, toggled from the same [TextWatcher.afterTextChanged]
+     * that already runs the filter, so the two stay in lockstep by
+     * construction rather than by a second listener to keep in sync.
      */
-    private fun searchField(): EditText = EditText(this).apply {
-        hint = "tìm trong đã nhớ"
-        setSingleLine()
-        textSize = 17f
-        setTextColor(Color.BLACK)
-        setBackgroundColor(Color.TRANSPARENT)
-        setPadding(dp(48), dp(24), dp(48), dp(8))
-        addTextChangedListener(
-            object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-                override fun afterTextChanged(s: Editable?) {
-                    show(allEntries.matching(s?.toString().orEmpty()))
-                }
-            },
-        )
+    private fun searchRow(): View {
+        val clear = caption("xoá").apply {
+            visibility = View.GONE
+            setPadding(dp(16), dp(24), 0, dp(8))
+            setOnClickListener { searchField.text?.clear() }
+        }
+        searchField = EditText(this).apply {
+            hint = "tìm trong đã nhớ"
+            setSingleLine()
+            textSize = 17f
+            setTextColor(Color.BLACK)
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(48), dp(24), 0, dp(8))
+            addTextChangedListener(
+                object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                    override fun afterTextChanged(s: Editable?) {
+                        val query = s?.toString().orEmpty()
+                        clear.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+                        show(allEntries.matching(query))
+                    }
+                },
+            )
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, dp(48), 0)
+            addView(searchField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(clear)
+        }
     }
 
     private fun loadEntries(): List<MemoryEntry> {
