@@ -265,9 +265,34 @@ Ba điểm thiết kế đáng nhớ:
 - **Nền PIN-lock — chưa hoàn chỉnh**: `PinStore`/`PinHash` (`settings/PinStore.kt`,
   `settings/PinHash.kt`) lưu PIN dạng salted SHA-256 hash trong `EncryptedSharedPreferences`
   (Keystore-backed), có toggle đặt/xoá trong màn hình Settings (`SettingsActivity.kt`, hàm
-  `togglePin`). **`PinStore.verify()` chưa được gọi ở đâu trong app** — chưa có màn hình khoá,
-  chưa có gì gate `MainActivity`. Đúng như comment trong chính `PinStore.kt`: lock screen đọc
-  `verify()` lúc app khởi động là việc của một chu kỳ sau, ngoài phạm vi ở đây.
+  `togglePin`, nhập PIN mới phải gõ lại lần 2 khớp mới lưu). `LockActivity`
+  (`settings/LockActivity.kt`) là màn hình nhập PIN hoàn chỉnh, gọi `PinStore.verify()`, nhưng
+  đứng độc lập — **không Activity nào khởi chạy nó**. Chưa có gì gate `MainActivity`: quyết định
+  "khi nào phải nhập lại PIN" (chỉ cold-start? mỗi lần quay lại từ background? có timeout?) là
+  quyết định sản phẩm, để dành cho một chu kỳ có review trực tiếp.
+
+## Tính năng thêm sáng 2026-08-22 (sau vòng mã hoá/CI/export/PIN ở trên)
+
+- **Xuất toàn bộ lịch sử**: nút "xuất tất cả" trên `HistoryActivity` gộp mọi cuộc trò chuyện của
+  agent đang xem thành 1 file `.txt` (`List<StoredConversation>.toPlainText()`,
+  `history/ConversationText.kt`), mỗi cuộc trò chuyện có tiêu đề ngày riêng.
+- **Tìm kiếm trong lịch sử và trong "đã nhớ"**: ô tìm kiếm trên `HistoryActivity` và
+  `MemoriesActivity`, khoan dung dấu tiếng Việt qua `fold()` (`library/Folded.kt`) — cùng cách
+  `DiaryMemory.recall` đã tìm cho model, giờ có luôn cho writer (`history/HistorySearch.kt`,
+  `tools/MemorySearch.kt`).
+- **Quên 1 memory trực tiếp từ `MemoriesActivity`**: không cần quay lại trang nhờ agent gọi
+  `forget_memory` nữa — `writeMemories()` (`tools/MemoryTools.kt`) dùng chung giữa tool và UI.
+- **Sao chép vào clipboard**: cạnh "chia sẻ" trên `TranscriptActivity` và trong dialog xem chi
+  tiết memory — không cần mở share sheet nếu chỉ muốn dán nhanh vào app khác.
+- **Nhân bản agent**: nút "nhân bản" trên `AgentsActivity`, áp dụng cho cả agent mặc định lẫn
+  tuỳ chỉnh — tạo agent mới từ prompt/greetings/tools của agent nguồn mà không đụng bản gốc
+  (`AgentStore.create()` luôn strip `agent_management` cho agent không phải builtin, nên nhân
+  bản `agent-manager` không lộ quyền quản lý agent).
+- **Cỡ chữ đọc lại độc lập với cỡ chữ trả lời**: `TranscriptFontSize`/`TranscriptFontSizeStore`
+  (`settings/TranscriptFontSize.kt`) — khác `ReplyFontSize` (đơn vị px cho nét chữ viết tay
+  rasterize), đây là sp cho `TextView` thường khi đọc lại.
+- **Nhập tay model id**: nút "nhập tay…" trong dialog chọn model ở Settings, cho model chưa kịp
+  vào shortlist `VISION_MODELS` hoặc model self-hosted.
 
 ## Quyết định thiết kế
 
