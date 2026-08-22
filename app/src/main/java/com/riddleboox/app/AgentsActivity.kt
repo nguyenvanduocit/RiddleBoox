@@ -14,17 +14,20 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import com.riddleboox.app.agent.DEFAULT_AGENT_GREETINGS
 import com.riddleboox.app.agent.AgentCapability
 import com.riddleboox.app.agent.AgentDefinition
 import com.riddleboox.app.agent.AgentSelectionStore
 import com.riddleboox.app.agent.AgentStore
+import com.riddleboox.app.agent.toPlainText
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
 import com.riddleboox.app.ui.textBlock
+import java.io.File
 
 /** Selects agents and edits the user-defined RiddleBoox agents. */
 class AgentsActivity : Activity() {
@@ -72,6 +75,7 @@ class AgentsActivity : Activity() {
                 addView(action("dùng") { select(agent) })
                 addView(action("nhớ") { startActivity(MemoriesActivity.intent(this@AgentsActivity, agent.id, agent.name)) })
                 addView(action("nhân bản") { edit(null, template = agent) })
+                addView(action("xuất") { export(agent) })
                 if (!agent.builtin) {
                     addView(action("sửa") { edit(agent) })
                     addView(action("xóa") { confirmDelete(agent) })
@@ -103,6 +107,31 @@ class AgentsActivity : Activity() {
         selection.write(agent.id)
         setResult(RESULT_OK)
         finish()
+    }
+
+    /**
+     * Writes the agent's definition out as plain text under `cacheDir/exports`
+     * and hands the file to whatever the writer picks from the share sheet —
+     * same pattern as [com.riddleboox.app.history.TranscriptActivity.share].
+     *
+     * Exports the definition only ([AgentDefinition.toPlainText]), never
+     * [AgentDefinition.workspace]: sharing "how this agent is configured"
+     * should not also hand off whatever that agent's tools have written to
+     * disk. Available for built-in agents too — reading or backing up a
+     * built-in's prompt is a legitimate use even though it cannot be edited.
+     */
+    private fun export(agent: AgentDefinition) {
+        val exportsDir = File(cacheDir, "exports").apply { mkdirs() }
+        val file = File(exportsDir, "agent-${agent.id}.txt")
+        file.writeText(agent.toPlainText())
+
+        val uri = FileProvider.getUriForFile(this, "$packageName.onyx.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "Chia sẻ agent"))
     }
 
     private fun edit(existing: AgentDefinition?, template: AgentDefinition? = existing) {
