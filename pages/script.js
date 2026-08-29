@@ -1,4 +1,5 @@
-const androidDownloadUrl = '';
+const androidDownloadUrl =
+  'https://github.com/nguyenvanduocit/RiddleBoox/releases/download/v0.2.0/RiddleBoox-v0.2.0.apk';
 
 document.querySelectorAll('[data-android-download]').forEach((link) => {
   if (!androidDownloadUrl) return;

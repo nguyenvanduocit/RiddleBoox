@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f1efe9" />
+    <meta
+      name="description"
+      content="How to install RiddleBoox on a BOOX tablet, connect your own API key, and write your first page."
+    />
+    <meta property="og:title" content="RiddleBoox — user guide" />
+    <meta
+      property="og:description"
+      content="Install the app, add your key, write a page, and let the reply come back in ink."
+    />
+    <meta property="og:type" content="website" />
+    <title>RiddleBoox — user guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="RiddleBoox home">
+        <span class="brand-mark">R</span>
+        <span class="brand-name">Riddle<span>Boox</span></span>
+      </a>
+      <nav class="nav-links" aria-label="Main navigation">
+        <a href="index.html#companion">The companion</a>
+        <a href="index.html#inside">How it learns you</a>
+        <a href="index.html#boox">Why handwriting</a>
+        <a href="guide.html" aria-current="page">User guide</a>
+      </nav>
+      <a class="nav-cta nav-download" href="index.html#download" data-android-download>
+        <svg class="android-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M8.4 5.7 7.3 3.9l.8-.5 1.1 1.8a6.1 6.1 0 0 1 5.6 0l1.1-1.8.8.5-1.1 1.8a5.7 5.7 0 0 1 2.1 3H6.3a5.7 5.7 0 0 1 2.1-3ZM5.2 9c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9Zm13.6 0c.5 0 .9.4.9.9v4.2c0 .5-.4.9-.9.9s-.9-.4-.9-.9V9.9c0-.5.4-.9.9-.9ZM7 9.1h10v6.6c0 .7-.5 1.2-1.2 1.2H8.2c-.7 0-1.2-.5-1.2-1.2V9.1Zm2.1 8.1h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Zm4.5 0h1.3v2.2c0 .5-.3.9-.7.9s-.7-.4-.7-.9v-2.2Z" />
+          <circle cx="9.2" cy="7.1" r=".55" fill="var(--paper)" />
+          <circle cx="14.8" cy="7.1" r=".55" fill="var(--paper)" />
+        </svg>
+        Download for Android <span aria-hidden="true">↓</span>
+      </a>
+    </header>
+
+    <main id="top">
+      <section class="guide-hero section-shell reveal">
+        <p class="eyebrow"><span class="eyebrow-dot"></span> User guide</p>
+        <h1>The first pages, <em>step by step.</em></h1>
+        <p class="hero-lede">
+          Five quiet steps: install the app, hand it a key, and write the first line.
+          Everything below was captured on a real BOOX tablet.
+        </p>
+      </section>
+
+      <section class="guide-step section-shell reveal" id="install">
+        <div class="guide-step-copy">
+          <div class="card-number">01</div>
+          <h2>Install the app.</h2>
+          <p>
+            On your BOOX tablet, open the browser and download
+            <a class="text-link" href="#" data-android-download>the APK</a>.
+            When Android asks, allow installs from the browser, then open the
+            downloaded file and confirm.
+          </p>
+          <ul class="guide-list">
+            <li>Works on BOOX tablets running Android 10 or newer.</li>
+            <li>The app is free and open source — <a class="text-link" href="https://github.com/nguyenvanduocit/RiddleBoox">read the code</a>.</li>
+            <li>Nothing is collected: your pages stay on the device, and your writing goes only to the AI provider you configure next.</li>
+          </ul>
+        </div>
+        <figure class="guide-figure guide-figure-plain">
+          <div class="guide-download-card">
+            <span class="guide-download-name">RiddleBoox-v0.2.0.apk</span>
+            <span class="guide-download-meta">45 MB · signed release · versionCode 2</span>
+            <a class="button button-download" href="index.html#download" data-android-download>Download <span aria-hidden="true">↓</span></a>
+          </div>
+          <figcaption>the build lives on GitHub releases</figcaption>
+        </figure>
+      </section>
+
+      <section class="guide-step section-shell reveal" id="key">
+        <div class="guide-step-copy">
+          <div class="card-number">02</div>
+          <h2>Hand it a key.</h2>
+          <p>
+            RiddleBoox ships without an AI key on purpose — the companion talks to
+            whichever OpenAI-compatible provider you choose. Open
+            <strong>SETTINGS</strong> in the top-right corner and fill in three fields:
+          </p>
+          <ul class="guide-list">
+            <li><strong>Base URL</strong> — where your provider lives; OpenRouter (<code>https://openrouter.ai/api</code>) is the default.</li>
+            <li><strong>API key</strong> — your own key from that provider. It is stored encrypted, on your device, and goes nowhere else.</li>
+            <li><strong>Model</strong> — any vision-capable model; the page travels as an image, so the model must be able to see.</li>
+          </ul>
+          <p>Tap <strong>SAVE</strong>, and the page works the moment the key is in.</p>
+        </div>
+        <figure class="guide-figure">
+          <img src="guide-settings.png" alt="RiddleBoox settings screen with base URL, API key, and model fields" loading="lazy" />
+          <figcaption>settings / the key stays on your device</figcaption>
+        </figure>
+      </section>
+
+      <section class="guide-step section-shell reveal" id="write">
+        <div class="guide-step-copy">
+          <div class="card-number">03</div>
+          <h2>Write the first line.</h2>
+          <p>
+            The companion opens each page with a line of its own. Just write beneath it —
+            with the pen, anywhere inside the frame. Spelling, hesitation, crossed-out
+            words: all of it is fine.
+          </p>
+          <p>
+            When you lift the pen and stay quiet for a moment, the page takes that as
+            “I'm done for now” and hands your words over — exactly as they look, ink and all.
+          </p>
+        </div>
+        <figure class="guide-figure guide-figure-stack">
+          <img src="guide-greeting.png" alt="A fresh RiddleBoox page opening with a handwritten greeting" loading="lazy" />
+          <img class="guide-strip" src="guide-ink-strip.png" alt="A handwritten line exactly as the diary receives it" loading="lazy" />
+          <figcaption>the greeting, and a line as the diary receives it</figcaption>
+        </figure>
+      </section>
+
+      <section class="guide-step section-shell reveal" id="reply">
+        <div class="guide-step-copy">
+          <div class="card-number">04</div>
+          <h2>Let the reply come back.</h2>
+          <p>
+            Your ink dissolves, the page thinks, and the answer returns in handwriting —
+            on the same paper, in the same rhythm. Nothing else appears: no chat bubbles,
+            no send button, no keyboard.
+          </p>
+          <p>
+            Keep writing under the reply to continue the thread, or tap
+            <strong>NEW PAGE</strong> to start a fresh one. Every finished page is kept in
+            <strong>HISTORY</strong>, so a thought can be picked up days later.
+          </p>
+        </div>
+        <figure class="guide-figure">
+          <img src="guide-reply.png" alt="A handwritten AI reply on the RiddleBoox page" loading="lazy" />
+          <figcaption>the reply, written in ink</figcaption>
+        </figure>
+      </section>
+
+      <section class="guide-step section-shell reveal" id="around">
+        <div class="guide-step-copy">
+          <div class="card-number">05</div>
+          <h2>Find your way around.</h2>
+          <p>The whole interface is one quiet row above the page:</p>
+          <ul class="guide-list">
+            <li><strong>NEW PAGE</strong> — finish this thread and open a blank one.</li>
+            <li><strong>MEMORIZE</strong> — ask the companion to keep what matters from the conversation in its long-term memory.</li>
+            <li><strong>The name in the middle</strong> — your current companion. Tap it to switch agents or write your own: a friend, a tutor, a reading companion.</li>
+            <li><strong>HISTORY</strong> — every finished page, searchable, resumable.</li>
+            <li><strong>SETTINGS</strong> — key, model, handwriting size, send mode, and a PIN lock if the diary should stay yours.</li>
+          </ul>
+        </div>
+        <figure class="guide-figure guide-figure-wide">
+          <img src="guide-chrome.png" alt="The RiddleBoox toolbar: new page, memorize, agent name, history, settings" loading="lazy" />
+          <img src="guide-history.png" alt="The history screen: searchable finished pages with dates and turn counts" loading="lazy" />
+          <figcaption>the whole toolbar, and the history it keeps</figcaption>
+        </figure>
+      </section>
+
+      <section class="guide-step section-shell reveal" id="trouble">
+        <div class="guide-step-copy">
+          <div class="card-number">✦</div>
+          <h2>If the page stays quiet.</h2>
+          <ul class="guide-list">
+            <li><strong>No reply?</strong> Check Wi-Fi first, then Settings — the base URL and key must belong to the same provider, and the model must support images.</li>
+            <li><strong>Reply in the wrong language?</strong> The companion follows your writing. Write in the language you want answered.</li>
+            <li><strong>Want a clean slate?</strong> NEW PAGE ends the thread; deleting a conversation in HISTORY removes it for good.</li>
+          </ul>
+        </div>
+        <figure class="guide-figure guide-figure-plain">
+          <div class="guide-quiet-card">
+            <span class="guide-quiet-mark">“</span>
+            <p>Write the line you almost kept to yourself.</p>
+            <a class="button button-primary" href="index.html#download" data-android-download>Get RiddleBoox <span aria-hidden="true">↓</span></a>
+          </div>
+          <figcaption>that is the whole manual</figcaption>
+        </figure>
+      </section>
+    </main>
+
+    <footer class="site-footer section-shell">
+      <div class="footer-brand"><span class="brand-mark">R</span><span>RiddleBoox</span></div>
+      <p>an AI diary made of ink</p>
+      <div class="footer-right"><span>BOOX / ANDROID</span><a href="https://github.com/nguyenvanduocit/RiddleBoox">GitHub ↗</a><a href="index.html">Back home ↑</a></div>
+    </footer>
+  </body>
+</html>

@@ -392,3 +392,58 @@ details p { max-width: 580px; padding: 0 40px 22px 0; margin-bottom: 0; color: v
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* ---- user guide ---- */
+.guide-hero { padding: 90px 0 30px; max-width: 760px; }
+.guide-hero h1 { margin: 18px 0 20px; font: 500 clamp(44px, 7vw, 72px)/1.02 var(--serif); letter-spacing: -.03em; }
+.guide-hero h1 em { font-style: italic; color: var(--tomato); }
+.guide-step {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 56px;
+  align-items: center;
+  padding: 64px 0;
+  border-top: 1px solid var(--soft-line);
+}
+.guide-step:nth-child(odd) .guide-step-copy { order: 2; }
+.guide-step h2 { margin: 0 0 14px; font: 500 clamp(28px, 4vw, 40px)/1.08 var(--serif); letter-spacing: -.02em; }
+.guide-step p { margin: 0 0 14px; color: var(--muted); }
+.guide-step code { font: 13px var(--mono); background: var(--paper-deep); padding: 2px 7px; border-radius: 6px; color: var(--ink); }
+.guide-list { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.guide-list li { position: relative; padding-left: 26px; color: var(--muted); }
+.guide-list li::before { content: "✦"; position: absolute; left: 2px; top: 1px; font-size: 11px; color: var(--tomato); }
+.guide-list strong { color: var(--ink); }
+.guide-figure { margin: 0; }
+.guide-figure img {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 22px 44px -30px rgba(17, 19, 16, .45);
+}
+.guide-figure figcaption { margin-top: 12px; font: 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.guide-figure-wide { grid-column: 1 / -1; }
+.guide-step:has(.guide-figure-wide) { grid-template-columns: 1fr; gap: 30px; }
+.guide-download-card, .guide-quiet-card {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  padding: 34px 30px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--paper-deep);
+}
+.guide-download-card .button { margin-top: 6px; }
+.guide-download-name { font: 500 15px var(--mono); }
+.guide-download-meta { font: 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.guide-quiet-card { background: var(--night); color: var(--paper); border-color: var(--night); }
+.guide-quiet-card p { margin: 0; font: 500 24px/1.25 var(--serif); }
+.guide-quiet-mark { font: 600 40px var(--serif); color: var(--acid); line-height: .6; }
+@media (max-width: 900px) {
+  .guide-step { grid-template-columns: 1fr; gap: 28px; padding: 44px 0; }
+  .guide-step:nth-child(odd) .guide-step-copy { order: 0; }
+  .guide-hero { padding-top: 56px; }
+}
+.guide-figure-stack { display: grid; gap: 14px; }
+.guide-figure-stack .guide-strip { width: min(100%, 560px); justify-self: center; padding: 18px 22px; }
+.guide-figure-wide img + img { margin-top: 14px; }
