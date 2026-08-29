@@ -8,6 +8,7 @@ import com.riddleboox.app.library.Epub
 import com.riddleboox.app.library.Highlight
 import com.riddleboox.app.library.Library
 import com.riddleboox.app.library.bestMatches
+import com.riddleboox.app.library.canOpenBooks
 import com.riddleboox.app.library.matching
 import com.riddleboox.app.library.named
 import com.riddleboox.app.reply.Toolbox
@@ -75,7 +76,10 @@ private const val MOST = 40
  * watching an empty page until the first word arrives, that is time.
  *
  * [openBook] is a seam for tests: the real one opens the file the library
- * points at, a test hands back a book built in memory.
+ * points at, a test hands back a book built in memory. [booksReadable] is the
+ * same kind of seam — the real one asks Android whether all-files access is
+ * on, which is what decides how [unopenable] explains a book that will not
+ * open.
  */
 class DiaryTools(
     private val library: Library,
@@ -83,6 +87,7 @@ class DiaryTools(
     private val zone: ZoneId = ZoneId.systemDefault(),
     private val openBook: (Book) -> Epub? = { Epub.open(File(it.path)) },
     private val openReader: suspend (Book) -> Boolean = { false },
+    private val booksReadable: () -> Boolean = ::canOpenBooks,
 ) : Toolbox {
 
     override val tools: List<ToolDescriptor> = listOf(
@@ -309,7 +314,7 @@ class DiaryTools(
         val head = shelfLine(book, library.highlights(book.id).size)
         if (!book.isEpub) return "$head\nOnly an EPUB can be opened and read; this is a ${book.format}. " +
             "What the writer marked in it can still be read with $READ_HIGHLIGHTS."
-        val epub = openBook(book) ?: return "$head\nThis book will not open — the file may be gone, or not readable from here."
+        val epub = openBook(book) ?: return "$head\n${unopenable(book)}"
         return epub.use {
             if (it.chapters.isEmpty()) return@use "$head\nThis book lists no chapters."
             val shown = it.chapters.take(CHAPTERS_LISTED)
@@ -326,7 +331,7 @@ class DiaryTools(
         val book = library.books().named(query) ?: return unknown(query)
         if (!book.isEpub) return "\"${book.title}\" is a ${book.format} and cannot be read from the inside. " +
             "What the writer marked in it can be read with $READ_HIGHLIGHTS."
-        val epub = openBook(book) ?: return "\"${book.title}\" will not open — the file may be gone, or not readable from here."
+        val epub = openBook(book) ?: return unopenable(book)
         return epub.use {
             val index = chapter - 1
             if (index !in it.chapters.indices) {
@@ -347,7 +352,7 @@ class DiaryTools(
         if (phrase.isEmpty()) return "Nothing was given to look for."
         val book = library.books().named(query) ?: return unknown(query)
         if (!book.isEpub) return "\"${book.title}\" is a ${book.format} and cannot be searched from the inside."
-        val epub = openBook(book) ?: return "\"${book.title}\" will not open — the file may be gone, or not readable from here."
+        val epub = openBook(book) ?: return unopenable(book)
         return epub.use {
             val found = it.passages(phrase, limit)
             if (found.isEmpty()) return@use "\"$phrase\" does not appear in \"${book.title}\"."
@@ -511,6 +516,24 @@ class DiaryTools(
             if (evening.title.isBlank()) "" else " · ${evening.title.take(QUOTE_CHARS)}"
 
     // ---- odds and ends ----
+
+    /**
+     * Why a book the library lists could not be opened from disk.
+     *
+     * Two causes wear the same null from [openBook] and send the writer to
+     * different places: with all-files access off every book on the shelf is
+     * unopenable and the diary's Settings page is the cure; with it on, this
+     * one file is broken or gone. The answer names which, because the model
+     * can only pass on what it is told — left as one sentence, "cannot open
+     * the file" reads as a mood, and the switch never gets found.
+     */
+    private fun unopenable(book: Book): String = if (booksReadable()) {
+        "\"${book.title}\" will not open — the file may be gone, or not readable from here."
+    } else {
+        "\"${book.title}\" cannot be opened: reading inside books is switched off for this diary. " +
+            "Tell the writer it can be turned on in the diary's Settings, on the row about reading " +
+            "whole books; titles, progress and marked passages all work without it."
+    }
 
     private fun unknown(query: String): String =
         "No book on this reader answers to \"$query\". $SEARCH_LIBRARY will say what is there."

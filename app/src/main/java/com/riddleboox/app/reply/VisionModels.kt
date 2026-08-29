@@ -25,14 +25,15 @@ data class VisionModel(
 )
 
 /**
- * The shortlist offered in settings — models that can read a page, one or two
- * per house, cheapest first within each.
+ * The measured shortlist — models that can read a page, one or two per house,
+ * cheapest first within each.
  *
- * A shortlist rather than the provider's whole catalogue: OpenRouter carries
- * 245 vision models, and picking between them on a stylus tablet is not a
- * decision anyone wants to scroll. Notes come from reading the same handwritten
- * Vietnamese page with each — the thing this diary actually asks a model to do,
- * and the thing the model cards do not tell you.
+ * Settings offers the configured server's own catalogue first (see
+ * `fetchModelIds`); this list is what the picker falls back to when that
+ * server cannot be asked, and the source of [VisionModel.reasoning] defaults
+ * either way. Notes come from reading the same handwritten Vietnamese page
+ * with each — the thing this diary actually asks a model to do, and the thing
+ * the model cards do not tell you.
  */
 val VISION_MODELS: List<VisionModel> = listOf(
     VisionModel(

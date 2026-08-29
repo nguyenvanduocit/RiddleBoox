@@ -112,4 +112,24 @@ class PageGeometryTest {
         val lowestThePenAccepts = pageHeightPx - REPLY_BOTTOM_PX - biggerLineHeight * 2
         assertEquals(lowestThePenAccepts, start, 0f)
     }
+
+    @Test
+    fun `a debug write with no standing reply starts at the top`() {
+        val start = replyWriteStartBelow(emptyList(), pageHeightPx)
+        assertEquals(REPLY_TOP_PX, start, 0f)
+    }
+
+    @Test
+    fun `a debug write goes underneath the diary's own last reply`() {
+        val start = replyWriteStartBelow(listOf(written(0f to 300f)), pageHeightPx)
+        assertEquals(300f + REPLY_GAP_PX, start, 0f)
+    }
+
+    @Test
+    fun `a debug write under a reply that fills the page still has a line to land on`() {
+        val start = replyWriteStartBelow(listOf(written(0f to 1800f)), pageHeightPx)
+        val lowestThePenAccepts =
+            pageHeightPx - REPLY_BOTTOM_PX - HandwritingPlanner.DEFAULT_LINE_HEIGHT_PX * 2
+        assertEquals(lowestThePenAccepts, start, 0f)
+    }
 }

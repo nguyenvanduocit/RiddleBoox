@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import com.riddleboox.app.agent.AgentDefinition
 import com.riddleboox.app.agent.AgentCapability
 import com.riddleboox.app.agent.AgentManagerTools
+import com.riddleboox.app.agent.AgentSelfTools
 import com.riddleboox.app.agent.AgentSelectionStore
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.agent.CompositeToolbox
@@ -55,7 +56,10 @@ import com.riddleboox.app.settings.ReplySettings
 import com.riddleboox.app.settings.SettingsActivity
 import com.riddleboox.app.library.Book
 import com.riddleboox.app.library.OnyxLibrary
+import com.riddleboox.app.library.allFilesAccess
 import com.riddleboox.app.library.canOpenBooks
+import com.riddleboox.app.library.checkBookAccess
+import com.riddleboox.app.onboarding.permissionOverlay
 import com.riddleboox.app.settings.SendMode
 import com.riddleboox.app.settings.SendModeStore
 import com.riddleboox.app.settings.SettingsStore
@@ -112,6 +116,10 @@ class MainActivity : Activity() {
     private var onboardingSeen = true
     /** Whether the "begin" button on the welcome screen has been tapped yet. */
     private var onboardingStarted = false
+    /** The screen's whole view tree — kept as a field so the onboarding permission overlay can attach to it after onCreate returns. */
+    private lateinit var root: FrameLayout
+    /** Non-null only while [showOnboardingPermissionOverlay]'s overlay is on screen. */
+    private var onboardingPermissionOverlay: View? = null
 
     private val inkCallbacks = object : InkCaptureController.Callbacks {
         override fun onPenDown(): Boolean = stateMachine.onPenDown()
@@ -130,6 +138,39 @@ class MainActivity : Activity() {
             Log.i(TAG, "demo write received: ${text?.take(60)}")
             if (text == null) return
             stateMachine.commitDemoText(text)
+        }
+    }
+
+    /**
+     * Debug/dev control channel, debug builds only, for driving and reading
+     * back the diary over adb where the e-ink panel is slow to read and hard
+     * to interact with by hand:
+     * ```
+     * adb shell "am broadcast -a com.riddleboox.app.DEBUG_CONTROL --es cmd 'memorize'"
+     * adb shell "am broadcast -a com.riddleboox.app.DEBUG_CONTROL --es cmd 'state'"
+     * adb shell "am broadcast -a com.riddleboox.app.DEBUG_CONTROL --es cmd 'position'"
+     * adb shell "am broadcast -a com.riddleboox.app.DEBUG_CONTROL --es cmd 'write some text'"
+     * ```
+     * `am broadcast` sends an ordered broadcast and blocks to print the
+     * receiver's `setResultData`, so the outcome comes back in the same adb
+     * call — no separate logcat/screenshot round trip needed to see whether a
+     * tap was accepted or why it failed.
+     */
+    private val debugControlReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val cmd = intent.getStringExtra(EXTRA_DEBUG_CMD)
+            Log.i(TAG, "debug control received: $cmd")
+            if (cmd == null) {
+                resultData = "rejected: no cmd"
+                return
+            }
+            resultData = when {
+                cmd == "memorize" -> stateMachine.memorize()
+                cmd == "state" -> stateMachine.debugStateSummary()
+                cmd == "position" -> stateMachine.debugReplyPosition()
+                cmd.startsWith("write ") -> stateMachine.debugWriteReplyInk(cmd.removePrefix("write "))
+                else -> "rejected: unknown cmd '$cmd'"
+            }
         }
     }
 
@@ -252,7 +293,7 @@ class MainActivity : Activity() {
             }
         }
 
-        val root = FrameLayout(this).apply {
+        root = FrameLayout(this).apply {
             addView(penSurface, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -336,6 +377,12 @@ class MainActivity : Activity() {
                     stateMachine.start()
                     onboardingController = null
                 },
+                // Right after the diary explains it can read the writer's
+                // books (ONBOARDING_SEGMENTS[4]) is where asking for the
+                // all-files-access permission actually makes sense to the
+                // writer, instead of it appearing unexplained in Settings.
+                permissionCheckpointAfter = ONBOARDING_PERMISSION_CHECKPOINT,
+                onPermissionCheckpoint = { showOnboardingPermissionOverlay() },
             )
             root.addView(
                 welcomeOverlay(this) { overlay ->
@@ -411,6 +458,50 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_HISTORY && resultCode == RESULT_OK) {
             pendingResumeId = data?.getStringExtra(HistoryActivity.EXTRA_RESUME_ID)
         }
+        // ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION always comes back with
+        // RESULT_CANCELED regardless of what the writer actually did on that
+        // screen — canOpenBooks() is the only honest way to tell.
+        if (requestCode == REQUEST_ONBOARDING_PERMISSION) testBookAccessThenResumeOnboarding()
+    }
+
+    /**
+     * Called once the writer returns from the all-files-access screen (or
+     * taps "not now" without ever leaving). If the switch is now on, this
+     * opens one real book to confirm reading actually works end to end — a
+     * true permission with a library the diary still can't read from would
+     * otherwise surface only much later, mid-conversation. Either way,
+     * onboarding always resumes: declining here just means the "books on
+     * this device" row in Settings does the asking later instead.
+     */
+    private fun testBookAccessThenResumeOnboarding() {
+        onboardingPermissionOverlay?.let { root.removeView(it) }
+        onboardingPermissionOverlay = null
+        if (canOpenBooks()) Log.i(TAG, "onboarding permission check: ${checkBookAccess(contentResolver)}")
+        onboardingController?.proceedFromCheckpoint()
+    }
+
+    /**
+     * The one interactive stop in an otherwise non-interactive onboarding —
+     * see [OnboardingController]'s permissionCheckpointAfter. Skipped
+     * entirely (resumed with nothing shown) when the permission is already
+     * granted or this device has nowhere to grant it.
+     */
+    private fun showOnboardingPermissionOverlay() {
+        val grantScreen = allFilesAccess(this)
+        if (canOpenBooks() || grantScreen == null) {
+            onboardingController?.proceedFromCheckpoint()
+            return
+        }
+        val overlay = permissionOverlay(
+            this,
+            onAllow = { startActivityForResult(grantScreen, REQUEST_ONBOARDING_PERMISSION) },
+            onSkip = { testBookAccessThenResumeOnboarding() },
+        )
+        onboardingPermissionOverlay = overlay
+        root.addView(
+            overlay,
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
+        )
     }
 
     /**
@@ -423,9 +514,10 @@ class MainActivity : Activity() {
      * one part that needs all-files access, which is granted in Settings and
      * not by a dialog (see AndroidManifest.xml); without it the shelf, the
      * progress and the highlights all still work and only [DiaryTools]'
-     * read_book says it cannot open the file. Which of the two the device is in
-     * is logged here, because from the page itself the difference is one
-     * sentence of the diary's and easy to mistake for a mood.
+     * read_book refuses — an answer that names the Settings switch as the
+     * reason, so the refusal sends the writer to the switch instead of reading
+     * as a mood. The state is logged here as well, for the bug report that
+     * arrives without the page.
      */
     private fun diaryTools(): DiaryTools {
         val library = OnyxLibrary(contentResolver)
@@ -512,6 +604,12 @@ class MainActivity : Activity() {
             // exactly when a new evening starts (app open, agent switch),
             // the same boundary RiddleStateMachine.conversationId uses.
             add(MemoryTools(selectedAgent.workspace, conversationId = UUID.randomUUID().toString()))
+            // Every agent may rewrite its own definition, so this is part of
+            // the default set rather than a capability. The id is bound here
+            // and never passed as an argument: an agent reaches itself only.
+            // Whatever it writes is read back at the next toolbox build, which
+            // is why the tool's answers promise "next time you are opened".
+            add(AgentSelfTools(agentStore, selectedAgent.id))
             if (AgentCapability.LIBRARY in selectedAgent.toolIds) {
                 add(diaryTools())
             }
@@ -649,11 +747,20 @@ class MainActivity : Activity() {
                 IntentFilter(ACTION_DEMO_WRITE),
                 ContextCompat.RECEIVER_EXPORTED,
             )
+            ContextCompat.registerReceiver(
+                this,
+                debugControlReceiver,
+                IntentFilter(ACTION_DEBUG_CONTROL),
+                ContextCompat.RECEIVER_EXPORTED,
+            )
         }
     }
 
     override fun onPause() {
-        if (BuildConfig.DEBUG) unregisterReceiver(demoWriteReceiver)
+        if (BuildConfig.DEBUG) {
+            unregisterReceiver(demoWriteReceiver)
+            unregisterReceiver(debugControlReceiver)
+        }
         penSurface.removeCallbacks(attachRetry)
         if (onboardingSeen) stateMachine.stop() else if (onboardingStarted) onboardingController?.stop()
         // Losing focus is temporary when Settings, Agents, or History is on
@@ -676,6 +783,10 @@ class MainActivity : Activity() {
         private const val REQUEST_SETTINGS = 1
         private const val REQUEST_HISTORY = 2
         private const val REQUEST_AGENTS = 3
+        private const val REQUEST_ONBOARDING_PERMISSION = 4
+
+        /** Index into ONBOARDING_SEGMENTS after which the all-files-access ask happens — see [showOnboardingPermissionOverlay]. */
+        private const val ONBOARDING_PERMISSION_CHECKPOINT = 4
 
         /** How long to wait before looking again for a surface with a size. */
         private const val ATTACH_RETRY_MS = 100L
@@ -683,5 +794,7 @@ class MainActivity : Activity() {
         private const val TAG = "MainActivity"
         private const val ACTION_DEMO_WRITE = "com.riddleboox.app.DEMO_WRITE"
         private const val EXTRA_DEMO_TEXT = "text"
+        private const val ACTION_DEBUG_CONTROL = "com.riddleboox.app.DEBUG_CONTROL"
+        private const val EXTRA_DEBUG_CMD = "cmd"
     }
 }

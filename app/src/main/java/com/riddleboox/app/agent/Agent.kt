@@ -17,8 +17,8 @@ data class AgentManifest(
     val builtin: Boolean = false,
     /**
      * Capability ids this agent opts into, resolved to toolboxes at runtime.
-     * The default toolset (workspace, memory, drawing) is every agent's and is
-     * never listed here — see [AgentCapability].
+     * The default toolset (workspace, memory, drawing, self-editing) is every
+     * agent's and is never listed here — see [AgentCapability].
      */
     val toolIds: Set<String> = emptySet(),
     /** Short lines the diary may write when this agent opens a blank page. */

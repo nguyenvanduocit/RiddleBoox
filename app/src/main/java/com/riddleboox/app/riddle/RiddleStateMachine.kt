@@ -243,6 +243,16 @@ class RiddleStateMachine(
     /** Whether the diary has already opened with its greeting — see [greet]. */
     private var greeted: Boolean = false
 
+    /**
+     * The last warning-level [Effect.Note], for a debug reader that has no
+     * other way to ask "what went wrong" than reopening [Log.w] under
+     * `RiddleStateMachine` — the status caption it also sets is overwritten
+     * by the next status change, and carries no history of its own. See
+     * [MainActivity]'s `DEBUG_CONTROL` receiver's `state` command.
+     */
+    var lastWarning: String? = null
+        private set
+
     /** The greeting last written, so [greeting] can avoid repeating it. */
     private var lastGreeting: String? = null
 
@@ -375,7 +385,12 @@ class RiddleStateMachine(
             Effect.AbandonRequest -> replyJob?.cancel()
             is Effect.RecordTurn -> persistTurn(effect.transcript, effect.reply)
             is Effect.Note ->
-                if (effect.warning) Log.w(TAG, effect.message) else Log.i(TAG, effect.message)
+                if (effect.warning) {
+                    lastWarning = effect.message
+                    Log.w(TAG, effect.message)
+                } else {
+                    Log.i(TAG, effect.message)
+                }
         }
     }
 
@@ -429,10 +444,15 @@ class RiddleStateMachine(
      * page for that line, and ink not yet handed over must never be blanked
      * out from under the writer — send it or turn to a new page first. Silent
      * too while a turn is in flight, same as every other chrome action.
+     *
+     * @return what happened, so a debug caller with no eyes on the page (see
+     * the `memorize` command on [MainActivity]'s `DEBUG_CONTROL` receiver)
+     * can tell a rejected tap from an accepted one instead of it landing
+     * silently either way. The chrome label ignores it.
      */
-    fun memorize() {
-        val s = state as? RiddleState.Listening ?: return
-        if (!strokeStore.isEmpty) return
+    fun memorize(): String {
+        val s = state as? RiddleState.Listening ?: return "rejected: state=${state::class.simpleName}"
+        if (!strokeStore.isEmpty) return "rejected: pending strokes"
         val now = ticker.nowMs()
         val diary = conversation
         if (diary == null) {
@@ -442,7 +462,7 @@ class RiddleStateMachine(
             panel.render(PageRenderState.EMPTY)
             state = writeWholeReply(excuseFor("no key"), now, startYPx = REPLY_TOP_PX)
             onStatusChanged("Replying (no LLM key configured)")
-            return
+            return "accepted: no key configured"
         }
         inkCapture.setInputEnabled(false)
         // Bound to the queue live at launch, same as [requestReply].
@@ -471,6 +491,7 @@ class RiddleStateMachine(
         }
         state = RiddleState.Memorizing(startedAtMs = now, standingReply = s.standingReply)
         onStatusChanged("Committing to memory…")
+        return "accepted"
     }
 
     /**
@@ -589,6 +610,62 @@ class RiddleStateMachine(
         }
         if (committed.isEmpty()) return
         commitStrokes(committed, s.standingReply, ticker.nowMs())
+    }
+
+    /**
+     * Debug entry point: writes [text] as reply ink, underneath whatever the
+     * diary last wrote — the same handwriting pipeline a real reply uses
+     * ([HandwritingPlanner]), landed straight on the page as a finished,
+     * standing block rather than staged as an in-flight turn.
+     *
+     * Unlike [commitDemoText] this never touches [conversation]: it does not
+     * simulate a page being handed over, so there is no request to answer and
+     * nothing to dissolve. It exists because [commitDemoText]'s "user ink"
+     * relabeling is exactly the wrong shape for a debug tool that wants text
+     * to actually stay on the page — see the `write` command on
+     * [MainActivity]'s `DEBUG_CONTROL` receiver.
+     *
+     * Same "one turn in flight, no ink not yet handed over" guard as
+     * [memorize]: it would otherwise overwrite pending strokes the writer
+     * has not sent yet, since this renders straight from state with no
+     * [Effect.Render] to carry [strokeStore]'s own ink along.
+     *
+     * @return what happened, for the adb caller to read back — there is no
+     * other channel for it.
+     */
+    fun debugWriteReplyInk(text: String): String {
+        val s = state as? RiddleState.Listening ?: return "rejected: state=${state::class.simpleName}"
+        if (!strokeStore.isEmpty) return "rejected: pending strokes"
+        val existing = s.standingReply?.strokes ?: emptyList()
+        val startYPx = replyWriteStartBelow(existing, panel.drawingRect().height, replyLineHeightPx)
+        val plan = handwritingPlanner.plan(
+            text = text,
+            pageWidthPx = pageWidthPx(),
+            fontSizePx = replyFontSizePx,
+            lineHeightPx = replyLineHeightPx,
+            startYPx = startYPx,
+        )
+        if (plan.strokes.isEmpty()) return "empty"
+        val combined = WritePlan(existing + plan.strokes)
+        panel.render(PageRenderState(replyStrokes = combined.strokes))
+        panel.requestFastPartialRefresh(writeBounds(plan.strokes) ?: panel.drawingRect())
+        state = RiddleState.Listening(standingReply = combined)
+        return "wrote at y=$startYPx"
+    }
+
+    /** What the `state` command on [MainActivity]'s `DEBUG_CONTROL` receiver reads back. */
+    fun debugStateSummary(): String =
+        "state=${state::class.simpleName} lastWarning=${lastWarning ?: "none"}"
+
+    /**
+     * Where [debugWriteReplyInk] would start its next block — the `position`
+     * command on [MainActivity]'s `DEBUG_CONTROL` receiver, so a caller can
+     * ask before writing rather than only find out afterward.
+     */
+    fun debugReplyPosition(): String {
+        val standingReply = (state as? RiddleState.Listening)?.standingReply
+            ?: return "empty (state=${state::class.simpleName})"
+        return "y=${replyWriteStartBelow(standingReply.strokes, panel.drawingRect().height, replyLineHeightPx)}"
     }
 
     /**

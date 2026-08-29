@@ -7,14 +7,14 @@ import android.widget.TextView
 /**
  * One settings row whose value is a preset picked from a short list — every
  * enum-backed setting on [SettingsActivity]'s page (reply font size,
- * transcript font size, send mode) is the same shape: read a store, remember what was
+ * send mode) is the same shape: read a store, remember what was
  * loaded against what the writer chose, and turn a tap into a single-choice
  * dialog. One class here replaces one copy of that shape per setting, so
  * adding the next one costs a single constructor call, not a new pick
  * function plus a new line in `dirty()` and `writeAndFinish()`.
  *
  * [read]/[write] rather than a shared store interface: the stores this wraps
- * ([ReplyFontSizeStore], [TranscriptFontSizeStore], [SendModeStore]) already
+ * ([ReplyFontSizeStore], [SendModeStore]) already
  * agree on the shape without needing to say so in a type, and a marker
  * interface across three unrelated files would exist only for this.
  */

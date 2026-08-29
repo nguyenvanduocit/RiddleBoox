@@ -241,6 +241,38 @@ class RiddleStateMachineTest {
     }
 
     @Test
+    fun `a debug write lands as reply ink underneath the standing reply, not user ink`() {
+        val h = harness()
+        h.machine.start()
+        h.tick(0)
+        h.driveUntilIdle() // greeting
+
+        val beforeCount = h.panel.renders.last().replyStrokes.size
+        val outcome = h.machine.debugWriteReplyInk("more")
+        assertTrue("write is accepted while listening", outcome.startsWith("wrote at y="))
+        val after = h.panel.renders.last()
+        assertTrue("no user ink is drawn by a debug write", after.userStrokes.isEmpty())
+        assertTrue(
+            "the greeting's strokes are still standing alongside the new ones",
+            after.replyStrokes.size > beforeCount,
+        )
+    }
+
+    @Test
+    fun `a debug write is rejected while a turn is in flight`() {
+        FakeChatServer(FakeChatServer.stream("Ta đã ghi nhớ.")).use { server ->
+            val h = harness(replySettings = ReplySettings(server.baseUrl, "sk-test", "openai/gpt-5.6-luna"))
+            h.machine.start()
+            h.tick(0)
+            h.driveUntilIdle() // greeting
+
+            h.machine.memorize()
+            val outcome = h.machine.debugWriteReplyInk("nope")
+            assertTrue("rejected, not silently dropped", outcome.startsWith("rejected:"))
+        }
+    }
+
+    @Test
     fun `the memorize label runs a housekeeping pass and records nothing`() {
         FakeChatServer(FakeChatServer.stream("Ta đã ghi nhớ chuyện này.")).use { server ->
             val h = harness(replySettings = ReplySettings(server.baseUrl, "sk-test", "openai/gpt-5.6-luna"))

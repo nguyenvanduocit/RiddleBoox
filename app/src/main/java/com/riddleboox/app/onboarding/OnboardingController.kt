@@ -35,6 +35,15 @@ class OnboardingController(
     private val replyFontSizePx: Float,
     private val pageWidthPx: () -> Int,
     private val onDone: () -> Unit,
+    /**
+     * Segment index after which the sequence pauses instead of advancing on
+     * its own — null means never. [onPermissionCheckpoint] fires once, and
+     * the caller must call [proceedFromCheckpoint] to resume; this is how the
+     * writer's tap on the all-files-access overlay gets a place to happen
+     * without OnboardingController knowing anything about permissions itself.
+     */
+    private val permissionCheckpointAfter: Int? = null,
+    private val onPermissionCheckpoint: () -> Unit = {},
 ) {
     init {
         require(segments.isNotEmpty()) { "Onboarding needs at least one segment." }
@@ -44,6 +53,9 @@ class OnboardingController(
     private var replyCursor: ReplyRevealCursor? = null
     private var lastRefreshAtMs: Long = 0L
     private var started = false
+
+    /** Segment index [tickHolding] is waiting to advance into, while paused at the checkpoint. */
+    private var checkpointPendingSegment: Int? = null
 
     /**
      * Bounds newly revealed since the last flush, not yet handed to the
@@ -121,6 +133,21 @@ class OnboardingController(
     }
 
     private fun tickHolding(s: OnboardingState.Holding, now: Long) {
+        if (s.segmentIndex == permissionCheckpointAfter && checkpointPendingSegment == null) {
+            val decision = decideOnboarding(s, now, caughtUp = true, totalSegments = segments.size)
+            if (!decision.advance) {
+                state = decision.state
+                return
+            }
+            // Hold here rather than call beginSegment: the writer needs a
+            // chance to tap the permission overlay (or dismiss it) before the
+            // page clears for the next segment. proceedFromCheckpoint does
+            // the clear/refresh/beginSegment this method would otherwise do.
+            checkpointPendingSegment = (decision.state as OnboardingState.Writing).segmentIndex
+            ticker.stop()
+            onPermissionCheckpoint()
+            return
+        }
         val decision = decideOnboarding(s, now, caughtUp = true, totalSegments = segments.size)
         state = decision.state
         if (decision.finished) {
@@ -128,15 +155,28 @@ class OnboardingController(
             return
         }
         if (decision.advance) {
-            regionView.clearReplyLayer()
-            regionView.render(PageRenderState.EMPTY)
-            // Not requestFullRefresh: this fires once per segment (5 times
-            // across 6 segments), and the GC16 flash that clears ghosting is
-            // jarring at that cadence. Quality mode redraws the whole region
-            // clean, without the flash.
-            refresher.requestQualityPartialRefresh(regionView, regionView.drawingRect())
-            beginSegment((state as OnboardingState.Writing).segmentIndex)
+            advanceToSegment((state as OnboardingState.Writing).segmentIndex)
         }
+    }
+
+    /** Resumes a sequence paused by [onPermissionCheckpoint]; a no-op if it never paused. */
+    fun proceedFromCheckpoint() {
+        val next = checkpointPendingSegment ?: return
+        checkpointPendingSegment = null
+        state = OnboardingState.Writing(next)
+        advanceToSegment(next)
+        ticker.start(TICK_MS, ::tick)
+    }
+
+    private fun advanceToSegment(index: Int) {
+        regionView.clearReplyLayer()
+        regionView.render(PageRenderState.EMPTY)
+        // Not requestFullRefresh: this fires once per segment (5 times
+        // across 6 segments), and the GC16 flash that clears ghosting is
+        // jarring at that cadence. Quality mode redraws the whole region
+        // clean, without the flash.
+        refresher.requestQualityPartialRefresh(regionView, regionView.drawingRect())
+        beginSegment(index)
     }
 
     private fun finish() {

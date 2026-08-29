@@ -86,6 +86,10 @@ fun blotRect(at: WritePoint): PageRect = PageRect(
 fun bottomOf(strokes: List<InkStroke>): Float =
     strokes.asSequence().flatMap { it.points.asSequence() }.maxOfOrNull { it.y } ?: 0f
 
+/** The lowest point any of [strokes] reaches — 0 when there is no reply ink at all. */
+fun bottomOfWrite(strokes: List<WriteStroke>): Float =
+    strokes.asSequence().flatMap { it.points.asSequence() }.maxOfOrNull { it.y } ?: 0f
+
 /**
  * Where a reply written underneath [strokes] starts — just below them, but
  * never so low that the page has no line left to give it.
@@ -111,6 +115,24 @@ fun replyStartBelow(
 ): Float {
     val below = bottomOf(strokes) + REPLY_GAP_PX
     // The lowest start WriteCursor.hasRoomForAnotherLine still accepts.
+    val lowest = pageHeightPx - REPLY_BOTTOM_PX - lineHeightPx * 2
+    return below.coerceIn(REPLY_TOP_PX, maxOf(REPLY_TOP_PX, lowest))
+}
+
+/**
+ * Where a debug write lands underneath the diary's own standing reply — same
+ * clamp as [replyStartBelow], measured against reply ink ([WriteStroke])
+ * rather than the writer's ([InkStroke]). See
+ * [RiddleStateMachine.debugWriteReplyInk], the one caller: a debug tool that
+ * appends ink after whatever the diary last wrote, the way a second answer
+ * would continue underneath the first.
+ */
+fun replyWriteStartBelow(
+    strokes: List<WriteStroke>,
+    pageHeightPx: Int,
+    lineHeightPx: Float = HandwritingPlanner.DEFAULT_LINE_HEIGHT_PX,
+): Float {
+    val below = bottomOfWrite(strokes) + REPLY_GAP_PX
     val lowest = pageHeightPx - REPLY_BOTTOM_PX - lineHeightPx * 2
     return below.coerceIn(REPLY_TOP_PX, maxOf(REPLY_TOP_PX, lowest))
 }

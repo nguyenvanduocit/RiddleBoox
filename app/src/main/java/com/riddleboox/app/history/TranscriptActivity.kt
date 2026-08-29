@@ -14,8 +14,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
-import com.riddleboox.app.settings.TranscriptFontSize
-import com.riddleboox.app.settings.TranscriptFontSizeStore
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
@@ -44,14 +42,13 @@ class TranscriptActivity : Activity() {
     private lateinit var store: ConversationStore
     private lateinit var conversationId: String
 
-    /** Sp size for [written] and [answered] — see [TranscriptFontSize], independent of the diary's own hand. */
-    private var fontSizeSp: Float = TranscriptFontSize.Default.sp
+    /** Sp size for [written] and [answered] — plain fixed size, independent of the diary's own hand. */
+    private val fontSizeSp: Float = 19f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         openPaperWindow()
 
-        fontSizeSp = TranscriptFontSizeStore(this).read().sp
         store = ConversationStore(this)
         conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty()
         val conversation = store.load(conversationId)

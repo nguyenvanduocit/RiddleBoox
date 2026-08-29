@@ -60,14 +60,17 @@ class DiaryToolsTest {
         memory: DiaryMemory = FakeMemory(emptyList()),
         fillerChars: Int = 0,
         openReader: suspend (Book) -> Boolean = { false },
+        booksReadable: () -> Boolean = { true },
+        openBook: (Book) -> Epub? = { book ->
+            if (book.isEpub) Epub.open(writeSampleEpub(folder.newFile(), fillerChars)) else null
+        },
     ) = DiaryTools(
         library = library,
         memory = memory,
         zone = ZoneId.of("UTC"),
-        openBook = { book ->
-            if (book.isEpub) Epub.open(writeSampleEpub(folder.newFile(), fillerChars)) else null
-        },
+        openBook = openBook,
         openReader = openReader,
+        booksReadable = booksReadable,
     )
 
     private fun ask(name: String, vararg arguments: Pair<String, Any>, tools: DiaryTools = tools()): String =
@@ -181,6 +184,40 @@ class DiaryToolsTest {
         assertTrue(answer.contains("is a pdf and cannot be read from the inside"))
         assertTrue(answer.contains("read_highlights"))
         assertTrue(ask("book_contents", "book" to "istio").contains("read_highlights"))
+    }
+
+    /**
+     * An EPUB that will not open while reading files is allowed is a broken or
+     * missing file; the same failure while it is not allowed is a switch the
+     * writer can flip. The two must not share a sentence — the first answer
+     * sends the writer looking for a lost file, the second for Settings, and
+     * pointing at the wrong one is how "the diary cannot read" gets reported
+     * as a mood instead of a permission.
+     */
+    @Test
+    fun `an epub that will not open while reading is allowed blames the file`() {
+        val answer = ask(
+            "read_book", "book" to "gombrich", "chapter" to 1,
+            tools = tools(openBook = { null }, booksReadable = { true }),
+        )
+        assertTrue(answer.contains("will not open"))
+        assertFalse(answer.contains("Settings"))
+    }
+
+    @Test
+    fun `an epub that will not open while reading is switched off points at the switch`() {
+        val shut = tools(openBook = { null }, booksReadable = { false })
+        for (
+            call in listOf(
+                ask("book_contents", "book" to "gombrich", tools = shut),
+                ask("read_book", "book" to "gombrich", "chapter" to 1, tools = shut),
+                ask("search_in_book", "book" to "gombrich", "query" to "mèo", tools = shut),
+            )
+        ) {
+            assertTrue("phải gọi tên đúng nguyên nhân: $call", call.contains("switched off"))
+            assertTrue("phải chỉ nơi bật lại: $call", call.contains("Settings"))
+            assertFalse("không được đổ cho file: $call", call.contains("file may be gone"))
+        }
     }
 
     // ---- what the reader wrote ----

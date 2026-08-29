@@ -314,9 +314,13 @@ kiếm (nút "xoá" riêng, chỉ hiện khi có chữ) và nút "xuất tất c
 - **Cỡ chữ đọc lại độc lập với cỡ chữ trả lời**: `TranscriptFontSize`/`TranscriptFontSizeStore`
   (`settings/TranscriptFontSize.kt`) — khác `ReplyFontSize` (đơn vị px cho nét chữ viết tay
   rasterize), đây là sp cho `TextView` thường khi đọc lại.
-- **Nhập tay model id**, **khôi phục mặc định** cho base url + model (cố ý loại api key — xem
-  `resetConnectionDefaults()`), **cảnh báo base url thừa `/v1`** trước khi lưu, **hiển thị phiên
-  bản app**, **PIN mới phải gõ lại lần 2 khớp mới lưu**.
+- **Base url chọn theo tên** (OpenAI / OpenRouter / other — chọn "other" mới hiện ô gõ url,
+  xem `settings/Providers.kt`), **api key che dạng password**, **danh sách model hỏi thẳng
+  server** (`GET /v1/models`, lọc model đọc được ảnh — `reply/ModelCatalog.kt`; offline rơi về
+  shortlist đo tay trong `VISION_MODELS`), **nhập tay model id**, **khôi phục mặc định** cho
+  base url + model nằm ngay trên tiêu đề mục "connection" (cố ý loại api key — xem
+  `resetConnectionDefaults()`), **cảnh báo base url thừa `/v1`** trước khi lưu, **hiển thị
+  phiên bản app**, **PIN mới phải gõ lại lần 2 khớp mới lưu**.
 
 ## Quyết định thiết kế
 

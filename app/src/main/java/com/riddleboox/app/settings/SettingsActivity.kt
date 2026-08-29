@@ -9,14 +9,17 @@ import android.text.InputType
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.riddleboox.app.BuildConfig
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.backup.wholeDiaryBackup
 import com.riddleboox.app.history.ConversationStore
+import com.riddleboox.app.library.BookAccessCheck
 import com.riddleboox.app.library.allFilesAccess
 import com.riddleboox.app.library.canOpenBooks
-import com.riddleboox.app.reply.VisionModel
+import com.riddleboox.app.library.checkBookAccess
+import com.riddleboox.app.reply.fetchModelIds
 import com.riddleboox.app.reply.modelChoices
 import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.ui.openPaperWindow
@@ -35,12 +38,12 @@ import java.io.File
  * `BuildConfig` directly — see [intent] — except for the version line at the
  * bottom of the page, which is read-only display with no default to override.
  *
- * Every row on the page is one of three shapes: a plain text field (base
- * url, api key — read straight off the [EditText] in [writeAndFinish]), a
- * preset picked from a short list (model, plus everything wrapped in
- * [EnumSettingRow]), or a self-contained toggle that writes through its own
- * store immediately ([PinField]) rather than waiting for "save". [dirty] and
- * [writeAndFinish] only ever need to know about the first two.
+ * Every row on the page is one of three shapes: a plain text field (api key,
+ * the custom base url — read straight off the [EditText] in [writeAndFinish]),
+ * a choice picked from a list (base url's provider, model, plus everything
+ * wrapped in [EnumSettingRow]), or a self-contained toggle that writes through
+ * its own store immediately ([PinField]) rather than waiting for "save".
+ * [dirty] and [writeAndFinish] only ever need to know about the first two.
  */
 class SettingsActivity : Activity() {
 
@@ -49,13 +52,20 @@ class SettingsActivity : Activity() {
 
     /** What was on the page when it opened — the thing [dirty] compares against. */
     private lateinit var loaded: ReplySettings
+    private lateinit var baseUrlChooser: TextView
     private lateinit var baseUrlField: EditText
+
+    /** The "custom base url" row, on the page only while [chosenProvider] is null. */
+    private lateinit var customBaseUrlRow: View
     private lateinit var apiKeyField: EditText
     private lateinit var modelField: TextView
     private lateinit var libraryField: TextView
+
+    /** The named server picked on the base-url row; null means "other", typed into [baseUrlField]. */
+    private var chosenProvider: Provider? = null
     private var chosenModel: String = ""
 
-    /** reply font size, transcript font size, send mode — see [EnumSettingRow]. */
+    /** reply font size, send mode — see [EnumSettingRow]. */
     private lateinit var enumRows: List<EnumSettingRow<*>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,16 +81,18 @@ class SettingsActivity : Activity() {
         val current = store.readOrDefault(defaults.baseUrl, defaults.apiKey, defaults.model)
         loaded = current
 
+        chosenProvider = providerFor(current.baseUrl)
+        baseUrlChooser = chooserField("") { pickBaseUrl() }
         baseUrlField = valueField(
             current.baseUrl,
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI,
         )
-        // Visible on purpose: the key is pasted or hand-typed once on a device
-        // with no physical keyboard, and a masked field makes a single wrong
-        // character indistinguishable from a wrong account.
+        // Masked: the key is a bearer token to a billed account, and settings
+        // is the one screen that gets opened while someone else is helping
+        // with the setup. A doubted character is cheaper re-pasted than shown.
         apiKeyField = valueField(
             current.apiKey,
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
         )
         chosenModel = current.model
         modelField = chooserField(current.model) { pickModel() }
@@ -94,15 +106,6 @@ class SettingsActivity : Activity() {
             read = fontSizeStore::read,
             write = fontSizeStore::write,
         )
-        val transcriptFontSizeStore = TranscriptFontSizeStore(this)
-        val transcriptFontSizeRow = EnumSettingRow(
-            activity = this,
-            entries = TranscriptFontSize.entries,
-            labelOf = TranscriptFontSize::label,
-            dialogTitle = "transcript font size",
-            read = transcriptFontSizeStore::read,
-            write = transcriptFontSizeStore::write,
-        )
         val sendModeStore = SendModeStore(this)
         val sendModeRow = EnumSettingRow(
             activity = this,
@@ -112,40 +115,37 @@ class SettingsActivity : Activity() {
             read = sendModeStore::read,
             write = sendModeStore::write,
         )
-        enumRows = listOf(fontSizeRow, transcriptFontSizeRow, sendModeRow)
+        enumRows = listOf(fontSizeRow, sendModeRow)
 
         val onboardingStore = OnboardingStore(this)
         val pinField = PinField(this)
 
         libraryField = statusField()
+        customBaseUrlRow = field("custom base url", baseUrlField)
+        showBaseUrl()
         val column = textBlock().apply {
-            addView(sectionHeader("connection"))
-            addView(field("base url", baseUrlField))
+            // "restore defaults" rides the section title because it acts on
+            // the section as a whole: base url and model together — never the
+            // api key, see resetConnectionDefaults().
+            addView(sectionHeader("connection", "restore defaults") { resetConnectionDefaults() })
+            addView(field("base url", baseUrlChooser))
+            addView(customBaseUrlRow)
             addView(field("api key", apiKeyField))
             addView(field("model", modelField))
-            // Ngay dưới "model" vì đây là field cấu hình kết nối cuối cùng —
-            // một nút gộp chung, khôi phục cả "base url" lẫn "model" về giá
-            // trị mặc định lúc build; "api key" cố ý bị loại, xem
-            // resetConnectionDefaults().
-            addView(
-                field(
-                    "restore defaults (base url + model)",
-                    chooserField("tap to restore") { resetConnectionDefaults() },
-                ),
-            )
 
             addView(sectionHeader("reading & writing"))
             addView(field("reply font size", fontSizeRow.field))
-            addView(field("transcript font size", transcriptFontSizeRow.field))
             addView(field("send mode", sendModeRow.field))
+
+            addView(sectionHeader("permissions", "check") { checkPermissions() })
             addView(field("books on this device", libraryField))
 
             addView(sectionHeader("security & info"))
             // Không tự finish() ở đây — gọi lại save() để không đánh mất các
             // field khác đang sửa dở trên cùng màn hình. save() lưu luôn mọi
             // field khác trên màn hình này (base url, api key, model, reply
-            // font size, transcript font size, send mode), không chỉ riêng cờ
-            // onboarding — có chủ đích, không phải side effect ngoài ý muốn.
+            // font size, send mode), không chỉ riêng cờ onboarding — có chủ
+            // đích, không phải side effect ngoài ý muốn.
             addView(field("introduction", chooserField("tap to replay") {
                 onboardingStore.write(false)
                 save()
@@ -198,7 +198,7 @@ class SettingsActivity : Activity() {
      * "unchanged" would drop the edit without asking.
      */
     private fun dirty(): Boolean =
-        baseUrlField.text.toString() != loaded.baseUrl ||
+        effectiveBaseUrl() != loaded.baseUrl ||
             apiKeyField.text.toString() != loaded.apiKey ||
             chosenModel != loaded.model ||
             enumRows.any { it.dirty }
@@ -231,6 +231,10 @@ class SettingsActivity : Activity() {
      */
     override fun onResume() {
         super.onResume()
+        refreshPermissionsRow()
+    }
+
+    private fun refreshPermissionsRow() {
         val canOpen = canOpenBooks()
         val where = if (canOpen) null else allFilesAccess(this)
         libraryField.text = when {
@@ -243,6 +247,25 @@ class SettingsActivity : Activity() {
     }
 
     /**
+     * The "permissions" section's own action, not tied to any one row under
+     * it: re-reads the switch (in case it changed since [onResume] last ran)
+     * and, when it's on, actually opens a book rather than trusting the
+     * switch alone — the same check the onboarding permission step runs, see
+     * [checkBookAccess].
+     */
+    private fun checkPermissions() {
+        refreshPermissionsRow()
+        val message = when (val result = checkBookAccess(contentResolver)) {
+            BookAccessCheck.PermissionMissing -> "not granted — tap the row above to allow it"
+            BookAccessCheck.LibraryEmpty -> "granted, but there's no book on the shelf to try reading"
+            BookAccessCheck.Readable -> "granted, and a book opened and read back fine"
+            is BookAccessCheck.Unreadable -> "granted, but opening a book failed" +
+                (result.reason?.let { ": $it" } ?: "")
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    /**
      * Gate before [writeAndFinish], not a correction of it: a base URL that
      * already ends in `/v1` makes koog double it up into
      * `.../v1/v1/chat/completions`, a 404 with no body and no other symptom —
@@ -251,7 +274,7 @@ class SettingsActivity : Activity() {
      * rewrites the field.
      */
     private fun save() {
-        if (looksLikeItHasTrailingV1(baseUrlField.text.toString())) {
+        if (looksLikeItHasTrailingV1(effectiveBaseUrl())) {
             AlertDialog.Builder(this)
                 .setMessage(
                     "This base URL seems to end in \"/v1\" — every API request " +
@@ -272,7 +295,7 @@ class SettingsActivity : Activity() {
     private fun writeAndFinish() {
         store.write(
             ReplySettings(
-                baseUrl = baseUrlField.text.toString(),
+                baseUrl = effectiveBaseUrl(),
                 apiKey = apiKeyField.text.toString(),
                 model = chosenModel,
             ).sanitized(defaults),
@@ -282,28 +305,82 @@ class SettingsActivity : Activity() {
         finish()
     }
 
+    /** The three base-url choices: the two named servers, then "other" typed by hand. */
+    private fun pickBaseUrl() {
+        val labels = (
+            PROVIDERS.map { it.label + "\n" + it.baseUrl } +
+                "other\nany OpenAI-compatible server"
+            ).toTypedArray()
+        val checked = PROVIDERS.indexOf(chosenProvider).takeIf { it >= 0 } ?: PROVIDERS.size
+        AlertDialog.Builder(this)
+            .setTitle("base url")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                chosenProvider = PROVIDERS.getOrNull(which)
+                showBaseUrl()
+                if (chosenProvider == null) baseUrlField.requestFocus()
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    /** Puts [chosenProvider] on the form: its name on the chooser, and the typed-url row only for "other". */
+    private fun showBaseUrl() {
+        baseUrlChooser.text = chosenProvider?.label ?: "other"
+        customBaseUrlRow.visibility = if (chosenProvider == null) View.VISIBLE else View.GONE
+    }
+
     /**
-     * The shortlist is the fast path: these are provider-qualified ids like
-     * `openai/gpt-5.6-luna`, and hand-typing one on a stylus tablet is how a
-     * working setup turns into a 404 over a single character. Tapping a row
-     * chooses it; what is picked is remembered in [chosenModel] because a
-     * TextView has no text to read back on save the way an EditText does.
-     * The neutral button opens [promptCustomModel] for the one case the
-     * shortlist can't cover — a model too new to have been added yet, or a
-     * self-hosted one.
-     *
-     * Not an [EnumSettingRow]: the shortlist's labels are composed from two
-     * fields (`label` + `note`) rather than one, matching is by id rather
-     * than equality, and the neutral "type it in…" escape hatch has no
-     * equivalent in a preset list — three differences, not a preset picker
-     * with different words.
+     * The base url the settings on this form add up to. [baseUrlField] keeps
+     * whatever was last typed even while a named provider is selected, so a
+     * writer flipping to "other" and back loses nothing — but only the choice
+     * on display counts.
+     */
+    private fun effectiveBaseUrl(): String = chosenProvider?.baseUrl ?: baseUrlField.text.toString()
+
+    /**
+     * Asks the configured server which models it actually serves — the base
+     * url and key on the form right now, not the saved ones, so a writer
+     * midway through pointing the diary somewhere new sees that server's
+     * catalogue. The wait dialog's "cancel" is the abort: once it is gone,
+     * a late answer shows nothing. When the server cannot be asked — offline,
+     * wrong key, empty catalogue — the curated shortlist steps in, so the
+     * picker still works on a beach.
      */
     private fun pickModel() {
-        val choices = modelChoices(chosenModel)
-        val labels = choices.map { it.label + "\n" + it.note }.toTypedArray()
+        val baseUrl = effectiveBaseUrl()
+        val apiKey = apiKeyField.text.toString().trim()
+        val waiting = AlertDialog.Builder(this)
+            .setMessage("asking the server for its models…")
+            .setNegativeButton("cancel", null)
+            .show()
+        Thread {
+            val fetched = runCatching { fetchModelIds(baseUrl, apiKey) }.getOrNull()
+            runOnUiThread {
+                // A backgrounded activity the OS reclaimed still runs this
+                // callback, and a forced window teardown leaves the dialog's
+                // own isShowing stale-true — showing the next dialog on a dead
+                // activity would BadTokenException.
+                if (isFinishing || isDestroyed || !waiting.isShowing) return@runOnUiThread
+                waiting.dismiss()
+                val ids = fetched.orEmpty()
+                if (ids.isEmpty()) pickModelFromShortlist() else pickModelFrom(ids)
+            }
+        }.apply { isDaemon = true; start() }
+    }
+
+    /**
+     * The server's own list. Tapping a row chooses it; what is picked is
+     * remembered in [chosenModel] because a TextView has no text to read back
+     * on save the way an EditText does. The model in use leads the list even
+     * when the server no longer carries it: opening this dialog must not be
+     * able to silently rewrite a working setup. The neutral button opens
+     * [promptCustomModel] for an id the server misreports or hides.
+     */
+    private fun pickModelFrom(ids: List<String>) {
+        val choices = if (chosenModel.isBlank() || chosenModel in ids) ids else listOf(chosenModel) + ids
         AlertDialog.Builder(this)
             .setTitle("model")
-            .setSingleChoiceItems(labels, choices.indexOfFirst { it.id == chosenModel }) { dialog, which ->
+            .setSingleChoiceItems(choices.toTypedArray(), choices.indexOf(chosenModel)) { dialog, which ->
                 choose(choices[which])
                 dialog.dismiss()
             }
@@ -311,9 +388,27 @@ class SettingsActivity : Activity() {
             .show()
     }
 
-    private fun choose(model: VisionModel) {
-        chosenModel = model.id
-        modelField.text = model.id
+    /**
+     * The offline fallback, and the one place the measured notes still show:
+     * the fetched list is bare ids, but these few have been read against the
+     * same handwritten page — see [modelChoices].
+     */
+    private fun pickModelFromShortlist() {
+        val choices = modelChoices(chosenModel)
+        val labels = choices.map { it.label + "\n" + it.note }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("model — couldn't reach the server, showing the shortlist")
+            .setSingleChoiceItems(labels, choices.indexOfFirst { it.id == chosenModel }) { dialog, which ->
+                choose(choices[which].id)
+                dialog.dismiss()
+            }
+            .setNeutralButton("type it in…") { _, _ -> promptCustomModel() }
+            .show()
+    }
+
+    private fun choose(modelId: String) {
+        chosenModel = modelId
+        modelField.text = modelId
     }
 
     /**
@@ -330,19 +425,18 @@ class SettingsActivity : Activity() {
      * url and model carry no such risk: a wrong one only 404s.
      */
     private fun resetConnectionDefaults() {
+        chosenProvider = providerFor(defaults.baseUrl)
         baseUrlField.setText(defaults.baseUrl)
-        chosenModel = defaults.model
-        modelField.text = defaults.model
+        showBaseUrl()
+        choose(defaults.model)
     }
 
     /**
-     * The escape hatch [pickModel] can't offer: a model id typed by hand for
-     * whatever isn't on the shortlist yet. No [VisionModel] backs it — there
-     * is no label or note to show, only the id the writer typed — so it
-     * writes straight into [chosenModel] the way [choose] writes `model.id`.
-     * Prefilled with the current id so re-opening this to tweak one character
-     * doesn't require retyping the whole thing; an empty submission is
-     * treated as "changed my mind" and leaves [chosenModel] untouched.
+     * The escape hatch the lists can't offer: a model id typed by hand for
+     * whatever the server misreports or hides. Prefilled with the current id
+     * so re-opening this to tweak one character doesn't require retyping the
+     * whole thing; an empty submission is treated as "changed my mind" and
+     * leaves [chosenModel] untouched.
      */
     private fun promptCustomModel() {
         val input = valueField(chosenModel, InputType.TYPE_CLASS_TEXT)
@@ -352,10 +446,7 @@ class SettingsActivity : Activity() {
             .setNegativeButton("cancel", null)
             .setPositiveButton("use") { _, _ ->
                 val id = input.text.toString().trim()
-                if (id.isNotEmpty()) {
-                    chosenModel = id
-                    modelField.text = id
-                }
+                if (id.isNotEmpty()) choose(id)
             }
             .show()
     }

@@ -3,6 +3,7 @@ package com.riddleboox.app.settings
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
+import android.view.Gravity
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -65,6 +66,30 @@ internal fun Activity.sectionHeader(title: String): TextView = TextView(this).ap
     setTextColor(Color.BLACK)
     setPadding(0, dp(56), 0, dp(4))
 }
+
+/**
+ * A [sectionHeader] carrying one small action at its right edge — for an
+ * operation that belongs to the whole section rather than to any one field
+ * under it. The action is set in [caption], the same quiet chrome type as the
+ * running head's "save", so it reads as a control and not as a fourth field.
+ */
+internal fun Activity.sectionHeader(title: String, actionLabel: String, onAction: () -> Unit): LinearLayout =
+    LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.BOTTOM
+        addView(
+            sectionHeader(title),
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        addView(
+            // The padding is the tap target, the same trade the running head
+            // makes: a 16sp caption is a small thing to hit with a stylus.
+            caption(actionLabel).apply {
+                setPadding(dp(24), dp(16), 0, dp(4))
+                setOnClickListener { onAction() }
+            },
+        )
+    }
 
 /** Reads like the fields around it, but opens a list instead of a keyboard. */
 internal fun Activity.chooserField(value: String, onTap: () -> Unit): TextView = TextView(this).apply {

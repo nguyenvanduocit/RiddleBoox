@@ -5,7 +5,7 @@ package com.riddleboox.app.agent
  * runtime.
  *
  * Only what an agent opts into lives here. The default toolset — workspace,
- * memory, drawing — is injected for every agent unconditionally in
+ * memory, drawing, self-editing — is injected for every agent unconditionally in
  * `MainActivity.agentToolbox` and is deliberately not a capability: a manifest
  * cannot turn it off, so an id for it would only be a second place for the
  * truth to live. Ids from older manifests that are no longer capabilities are
