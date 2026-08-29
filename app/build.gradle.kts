@@ -40,8 +40,8 @@ android {
         applicationId = "com.riddleboox.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         buildConfigField("String", "LLM_API_KEY", "\"${localProperties.getProperty("llm.apiKey", "")}\"")
         buildConfigField("String", "LLM_BASE_URL", "\"${localProperties.getProperty("llm.baseUrl", "https://openrouter.ai/api")}\"")
@@ -62,6 +62,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Public builds must never embed the developer's key from local.properties;
+            // users bring their own key via Settings (SettingsStore falls back to this default).
+            buildConfigField("String", "LLM_API_KEY", "\"\"")
             if (keystoreProperties.containsKey("storeFile")) {
                 signingConfig = signingConfigs.getByName("release")
             }
