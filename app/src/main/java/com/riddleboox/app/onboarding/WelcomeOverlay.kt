@@ -20,14 +20,14 @@ import com.riddleboox.app.ui.dp
 fun welcomeOverlay(context: Context, onStart: (View) -> Unit): View {
     lateinit var overlay: View
     val title = TextView(context).apply {
-        text = "Chào mừng"
+        text = "Welcome"
         textSize = 40f
         typeface = Typeface.create("serif", Typeface.BOLD)
         setTextColor(Color.BLACK)
         gravity = Gravity.CENTER
     }
     val startButton = TextView(context).apply {
-        text = "bắt đầu"
+        text = "begin"
         textSize = 20f
         setTextColor(Color.BLACK)
         gravity = Gravity.CENTER

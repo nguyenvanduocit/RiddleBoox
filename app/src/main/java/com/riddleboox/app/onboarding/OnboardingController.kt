@@ -37,7 +37,7 @@ class OnboardingController(
     private val onDone: () -> Unit,
 ) {
     init {
-        require(segments.isNotEmpty()) { "Onboarding cần ít nhất một đoạn." }
+        require(segments.isNotEmpty()) { "Onboarding needs at least one segment." }
     }
 
     private var state: OnboardingState = OnboardingState.Writing(0)
@@ -92,7 +92,7 @@ class OnboardingController(
         regionView.beginReply()
         reveal.add(cursor.append(segments[index]))
         if (cursor.pageFull) {
-            Log.w(TAG, "onboarding segment $index tràn quá một trang — rút ngắn nội dung")
+            Log.w(TAG, "onboarding segment $index overflows one page — shorten its text")
         }
         lastRefreshAtMs = 0L
         pendingDirtyRect = null

@@ -10,7 +10,7 @@ import java.util.Locale
  * answered — with a blank line between turns so a run of them still reads as
  * a conversation once it is outside [TranscriptActivity]'s two-hand layout.
  *
- * Used by the "chia sẻ" action, not by [ConversationStore] — the on-disk
+ * Used by the "share" action, not by [ConversationStore] — the on-disk
  * record stays JSON; this is only ever built to hand to a share sheet.
  */
 fun StoredConversation.toPlainText(): String = turns.joinToString(separator = "\n\n") { it.toPlainText() }
@@ -48,13 +48,13 @@ fun List<StoredConversation>.toPlainText(): String =
 
 /**
  * A blank side of a turn is left out rather than printed as an empty
- * labelled line: "(mực nhoè)" is a placeholder for the reader looking at the
+ * labelled line: "(smudged ink)" is a placeholder for the reader looking at the
  * page in [TranscriptActivity], but a share target reading a plain-text file
  * has no page to explain it is missing from, so an empty line there would
  * just look like a formatting mistake.
  */
 private fun StoredTurn.toPlainText(): String =
     listOfNotNull(
-        transcript.takeIf { it.isNotBlank() }?.let { "Bạn: $it" },
-        reply.takeIf { it.isNotBlank() }?.let { "Nhật ký: $it" },
+        transcript.takeIf { it.isNotBlank() }?.let { "You: $it" },
+        reply.takeIf { it.isNotBlank() }?.let { "Diary: $it" },
     ).joinToString(separator = "\n")

@@ -69,8 +69,8 @@ class HistoryActivity : Activity() {
             )
             addView(column)
         }
-        val title = if (agentName != null) "$agentName · lịch sử" else "lịch sử"
-        setContentView(paperPage(runningHead(title, "xuất tất cả", onAction = { exportAll() }), body))
+        val title = if (agentName != null) "$agentName · history" else "history"
+        setContentView(paperPage(runningHead(title, "export all", onAction = { exportAll() }), body))
     }
 
     override fun onResume() {
@@ -90,19 +90,19 @@ class HistoryActivity : Activity() {
      * matching [textBlock]'s) because it sits beside [column] in `body` rather
      * than inside it, so it has no padded parent to inherit that inset from.
      *
-     * Beside the field, a "xoá" caption that only shows once there's a query to
+     * Beside the field, a "clear" caption that only shows once there's a query to
      * clear — tapping it empties [searchField], which re-fires the
      * [TextWatcher] below and puts the row back to its resting, buttonless
      * state on its own; no extra code needed to hide it again.
      */
     private fun searchRow(): LinearLayout {
-        val clearAction = caption("xoá").apply {
+        val clearAction = caption("clear").apply {
             visibility = View.GONE
             setPadding(dp(12), dp(24), dp(48), dp(8))
             setOnClickListener { searchField.text?.clear() }
         }
         searchField = EditText(this).apply {
-            hint = "tìm trong lịch sử"
+            hint = "search history"
             setSingleLine()
             textSize = 17f
             setTextColor(Color.BLACK)
@@ -132,7 +132,7 @@ class HistoryActivity : Activity() {
         if (conversations.isEmpty()) {
             column.addView(
                 TextView(this).apply {
-                    text = "chưa có trang nào được viết"
+                    text = "no pages have been written yet"
                     textSize = 18f
                     typeface = Typeface.SERIF
                     setTextColor(Color.BLACK)
@@ -150,7 +150,7 @@ class HistoryActivity : Activity() {
      */
     private fun entry(conversation: StoredConversation): View {
         val opening = TextView(this).apply {
-            text = conversation.title.ifBlank { "trang không đọc được" }
+            text = conversation.title.ifBlank { "an unreadable page" }
             maxLines = 2
             textSize = 20f
             typeface = Typeface.SERIF
@@ -184,7 +184,7 @@ class HistoryActivity : Activity() {
 
     /**
      * Passes a resumed conversation up to the diary and closes: the writer
-     * tapped "tiếp tục" two screens down, and what they expect to see next is
+     * tapped "continue" two screens down, and what they expect to see next is
      * the page, not the index they went through to get there.
      */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -202,7 +202,7 @@ class HistoryActivity : Activity() {
      * would show an older date sitting above a genuinely older, untouched one.
      */
     private fun writtenOn(conversation: StoredConversation): String =
-        DAY_AND_TIME.format(Date(conversation.updatedAtMs)) + " · " + conversation.turns.size + " lượt"
+        DAY_AND_TIME.format(Date(conversation.updatedAtMs)) + " · " + conversation.turns.size + " turns"
 
     /**
      * Writes every conversation for [agentId] out as one plain-text file under
@@ -211,7 +211,7 @@ class HistoryActivity : Activity() {
      *
      * Re-reads [store] rather than the list [show] last drew, for the same
      * reason [TranscriptActivity.share] re-reads instead of reusing [onCreate]'s
-     * snapshot: a tap on "xuất tất cả" a while after the screen opened should
+     * snapshot: a tap on "export all" a while after the screen opened should
      * export what's on disk right now, not what was there when this screen was
      * last resumed.
      */
@@ -227,7 +227,7 @@ class HistoryActivity : Activity() {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "Chia sẻ toàn bộ lịch sử"))
+        startActivity(Intent.createChooser(intent, "Share the whole history"))
     }
 
     companion object {

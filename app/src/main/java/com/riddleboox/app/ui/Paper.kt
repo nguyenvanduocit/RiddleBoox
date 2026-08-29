@@ -104,7 +104,7 @@ fun Activity.runningHead(
         addView(
             // The padding is the tap target: a 16sp caption is a small thing to
             // hit with a stylus, so the word carries the space beside it.
-            caption("‹ quay lại").apply {
+            caption("‹ back").apply {
                 setPadding(0, chromeTopInset(), dp(20), dp(6))
                 setOnClickListener { onBack() }
             },
@@ -146,7 +146,7 @@ fun Activity.runningHead(
  * under it.
  *
  * Pinned rather than scrolled with the body because the head carries the way
- * out — a transcript long enough to scroll its own "quay lại" off the top would
+ * out — a transcript long enough to scroll its own "back" off the top would
  * otherwise strand the writer on a window with no navigation bar.
  *
  * [body] brings its own vertical rhythm: it is laid out flush against the head's

@@ -35,8 +35,8 @@ class AgentTextTest {
         val text = definition().toPlainText()
 
         val expected = """
-            Tên: Trợ lý thử
-            Mô tả: Một agent thử nghiệm.
+            Name: Trợ lý thử
+            Description: Một agent thử nghiệm.
             Tools: library
 
             Greetings:
@@ -53,8 +53,8 @@ class AgentTextTest {
     fun `blank description is left out instead of printed as an empty line`() {
         val text = definition(description = "").toPlainText()
 
-        assertFalse(text.contains("Mô tả:"))
-        assertTrue(text.startsWith("Tên: Trợ lý thử\nTools:"))
+        assertFalse(text.contains("Description:"))
+        assertTrue(text.startsWith("Name: Trợ lý thử\nTools:"))
     }
 
     @Test

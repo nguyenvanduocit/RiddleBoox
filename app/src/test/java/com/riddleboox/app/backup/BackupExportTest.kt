@@ -33,7 +33,7 @@ class BackupExportTest {
         val ms = 1_700_000_000_000L
         val text = wholeDiaryBackup(emptyList(), emptyList(), emptyMap(), exportedAtMs = ms)
 
-        assertTrue(text.startsWith("SAO LƯU RIDDLEBOOX — " + dayAndTime.format(Date(ms))))
+        assertTrue(text.startsWith("RIDDLEBOOX BACKUP — " + dayAndTime.format(Date(ms))))
     }
 
     @Test
@@ -63,14 +63,14 @@ class BackupExportTest {
             exportedAtMs = 0L,
         )
 
-        val chatSection = text.substringAfter("HỘI THOẠI").substringBefore("GHI NHỚ")
+        val chatSection = text.substringAfter("CONVERSATIONS").substringBefore("MEMORIES")
         assertTrue(chatSection.contains("Chào nhé"))
         assertTrue(chatSection.contains("Ghi lại việc này"))
         // "Chit chat" heading precedes its own conversation and not the other agent's.
         assertTrue(chatSection.indexOf("Chit chat") < chatSection.indexOf("Chào nhé"))
         assertTrue(chatSection.indexOf("Chit chat") < chatSection.indexOf("Ghi lại việc này"))
 
-        val memorySection = text.substringAfter("GHI NHỚ")
+        val memorySection = text.substringAfter("MEMORIES")
         assertTrue(memorySection.contains("Thích trà xanh"))
         assertTrue(memorySection.contains("Đang học guitar"))
         // Each memory sits under its own agent's heading, not the other one's.
@@ -88,13 +88,13 @@ class BackupExportTest {
             exportedAtMs = 0L,
         )
 
-        // Its own definition still names it in CÁC AGENT — only the two
+        // Its own definition still names it in AGENTS — only the two
         // per-agent sections skip an agent with nothing to show.
-        val conversationsSection = text.substringAfter("HỘI THOẠI").substringBefore("GHI NHỚ")
-        val memoriesSection = text.substringAfter("GHI NHỚ")
+        val conversationsSection = text.substringAfter("CONVERSATIONS").substringBefore("MEMORIES")
+        val memoriesSection = text.substringAfter("MEMORIES")
         assertFalse(conversationsSection.contains("Im lặng"))
         assertFalse(memoriesSection.contains("Im lặng"))
-        assertTrue(text.contains("(chưa có gì)"))
+        assertTrue(text.contains("(nothing yet)"))
     }
 
     @Test
@@ -104,8 +104,8 @@ class BackupExportTest {
 
         val text = wholeDiaryBackup(listOf(chat, notes), emptyList(), emptyMap(), exportedAtMs = 0L)
 
-        assertTrue(text.contains("CÁC AGENT (2)"))
-        assertTrue(text.contains("Tên: Chit chat"))
-        assertTrue(text.contains("Tên: Quản lý note"))
+        assertTrue(text.contains("AGENTS (2)"))
+        assertTrue(text.contains("Name: Chit chat"))
+        assertTrue(text.contains("Name: Quản lý note"))
     }
 }

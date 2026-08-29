@@ -10,7 +10,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.io.File
-import java.io.IOException
 import java.util.ArrayDeque
 import java.util.regex.Pattern
 
@@ -177,13 +176,13 @@ class WorkspaceTools(workspace: File) : Toolbox {
     }
 
     override fun note(name: String, arguments: JsonObject): String = when (name) {
-        READ -> "đang đọc artifact…"
-        WRITE, APPEND, EDIT -> "đang ghi artifact…"
-        DELETE -> "đang xóa artifact…"
-        SEARCH, GREP, REGEX_SEARCH -> "đang tìm trong workspace…"
-        LIST, STAT -> "đang kiểm tra workspace…"
-        MKDIR -> "đang tạo thư mục…"
-        else -> "đang làm việc với workspace…"
+        READ -> "reading an artifact…"
+        WRITE, APPEND, EDIT -> "writing an artifact…"
+        DELETE -> "deleting an artifact…"
+        SEARCH, GREP, REGEX_SEARCH -> "searching the workspace…"
+        LIST, STAT -> "checking the workspace…"
+        MKDIR -> "making a folder…"
+        else -> "working in the workspace…"
     }
 
     private fun list(path: String, requestedDepth: Int): String {

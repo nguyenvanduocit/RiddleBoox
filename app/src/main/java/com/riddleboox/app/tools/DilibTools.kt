@@ -10,8 +10,6 @@ import com.riddleboox.app.reply.Toolbox
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 
 private const val SEARCH_BOOKS = "search_dilib_books"
 private const val DOWNLOAD_BOOK = "download_dilib_book"
@@ -63,7 +61,7 @@ class DilibTools(
     )
 
     override suspend fun call(name: String, arguments: JsonObject): String = withContext(Dispatchers.IO) {
-        try {
+        runCatching {
             when (name) {
                 SEARCH_BOOKS -> search(
                     arguments.text("query"),
@@ -71,68 +69,60 @@ class DilibTools(
                     arguments.count("page", 1),
                 )
                 DOWNLOAD_BOOK -> download(arguments.text("book_id"), arguments.text("format"))
-                else -> "Không có tool dilib tên là $name."
+                else -> "There is no dilib tool called $name."
             }
-        } catch (error: Exception) {
-            "dilib không thực hiện được yêu cầu: ${error.message ?: error.javaClass.simpleName}"
-        }
+        }.getOrElse { error -> "dilib could not carry that out: ${error.message ?: error.javaClass.simpleName}" }
     }
 
     override fun note(name: String, arguments: JsonObject): String = when (name) {
         SEARCH_BOOKS -> arguments.text("query").takeIf { it.isNotBlank() }
-            ?.let { "Đang tìm \"$it\" trên dilib…" }
-            ?: "Đang tìm sách trên dilib…"
-        DOWNLOAD_BOOK -> "Đang tải sách từ dilib vào thư viện BOOX…"
-        else -> "Đang làm việc với dilib…"
+            ?.let { "Searching dilib for \"$it\"…" }
+            ?: "Searching dilib for books…"
+        DOWNLOAD_BOOK -> "Fetching a book from dilib into the BOOX library…"
+        else -> "Working with dilib…"
     }
 
     private suspend fun search(query: String, limit: Int, page: Int): String {
-        require(query.isNotBlank()) { "Cần từ khóa để tìm sách." }
+        require(query.isNotBlank()) { "A search needs a keyword." }
         val result = client.search(query, page = page, count = limit.coerceIn(1, MAX_LIMIT))
-        if (result.books.isEmpty()) return "Không tìm thấy sách nào trên dilib cho \"$query\"."
+        if (result.books.isEmpty()) return "dilib has no books matching \"$query\"."
         return buildString {
-            append("Tìm thấy ${result.books.size} kết quả trên dilib cho \"$query\" · trang ${result.page}/${result.totalPages}:\n")
+            append("Found ${result.books.size} results on dilib for \"$query\" · page ${result.page}/${result.totalPages}:\n")
             result.books.forEachIndexed { index, book ->
                 append(index + 1)
                 append(". [id=${book.id}] ")
-                append(book.title.ifBlank { "Không có tiêu đề" })
+                append(book.title.ifBlank { "Untitled" })
                 append(" | ")
-                append(book.author.ifBlank { "không rõ tác giả" })
+                append(book.author.ifBlank { "unknown author" })
                 if (book.formatLabel.isNotBlank()) append(" | ${book.formatLabel}")
-                if (book.pages.isNotBlank()) append(" | ${book.pages} trang")
-                if (book.downloads.isNotBlank()) append(" | ${book.downloads} lượt tải")
+                if (book.pages.isNotBlank()) append(" | ${book.pages} pages")
+                if (book.downloads.isNotBlank()) append(" | ${book.downloads} downloads")
                 append('\n')
             }
             // dilib's search cards name one format even for books it also has
             // as EPUB, so the list above must not be quoted back as the whole
             // truth — download_dilib_book reads the book page and knows.
-            append("Định dạng ở trên là dilib in trên thẻ tìm kiếm, có thể còn định dạng khác. ")
-            append("Muốn tải, hãy xác nhận đúng id rồi gọi $DOWNLOAD_BOOK.")
+            append("The formats above are what dilib prints on its search cards; others may exist. ")
+            append("To download, confirm the right id and call $DOWNLOAD_BOOK.")
         }
     }
 
     private suspend fun download(id: String, format: String): String {
-        require(id.isNotBlank()) { "Cần book_id của sách muốn tải." }
+        require(id.isNotBlank()) { "Downloading needs the book_id of the book." }
         val book = client.fetchBook(id)
         val file = book.preferred(format)
             ?: return noFile(book, format)
         val saved = client.download(book, file, appContext)
         client.index(saved, appContext)
-        return "Đã tải \"${book.title}\" (${file.format.uppercase()}) vào thư viện BOOX: ${saved.absolutePath}. " +
-            "Hãy làm mới NeoReader nếu sách chưa hiện ngay."
+        return "Downloaded \"${book.title}\" (${file.format.uppercase()}) into the BOOX library: ${saved.absolutePath}. " +
+            "Refresh NeoReader if the book does not appear right away."
     }
 
     private fun noFile(book: DilibBook, format: String): String = when {
         book.formats.isEmpty() ->
-            "\"${book.title}\" trên dilib không có file tải xuống, chỉ có bản đọc online tại ${book.url}."
+            "\"${book.title}\" has no downloadable file on dilib, only an online reading copy at ${book.url}."
         format.isNotBlank() ->
-            "\"${book.title}\" không có bản $format. Định dạng đang có: ${book.formatLabel}."
-        else -> "\"${book.title}\" không có file tải xuống."
+            "\"${book.title}\" has no $format edition. Available formats: ${book.formatLabel}."
+        else -> "\"${book.title}\" has no downloadable file."
     }
-
-    private fun JsonObject.text(name: String): String =
-        (this[name] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
-
-    private fun JsonObject.count(name: String, fallback: Int): Int =
-        text(name).toIntOrNull() ?: fallback
 }

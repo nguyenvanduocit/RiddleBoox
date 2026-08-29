@@ -44,7 +44,7 @@ class AgentsActivity : Activity() {
         store.ensureDefaults()
         selection = AgentSelectionStore(this)
         column = textBlock()
-        setContentView(paperPage(runningHead("agents", "tạo", onAction = { edit(null) }), column))
+        setContentView(paperPage(runningHead("agents", "new", onAction = { edit(null) }), column))
     }
 
     override fun onResume() {
@@ -57,13 +57,13 @@ class AgentsActivity : Activity() {
         val selected = selection.read()
         for (agent in store.list()) {
             val title = TextView(this).apply {
-                text = if (agent.id == selected) "${agent.name}  · đang dùng" else agent.name
+                text = if (agent.id == selected) "${agent.name}  · in use" else agent.name
                 textSize = 21f
                 typeface = Typeface.SERIF
                 setTextColor(Color.BLACK)
             }
             val details = TextView(this).apply {
-                text = "${agent.id} · ${if (agent.builtin) "mặc định" else "tùy chỉnh"} · tools: ${agent.toolIds.joinToString(", ")} · greetings: ${agent.greetings.size}\n${agent.description}"
+                text = "${agent.id} · ${if (agent.builtin) "built-in" else "custom"} · tools: ${agent.toolIds.joinToString(", ")} · greetings: ${agent.greetings.size}\n${agent.description}"
                 textSize = 16f
                 typeface = Typeface.SERIF
                 setTextColor(Color.BLACK)
@@ -73,13 +73,13 @@ class AgentsActivity : Activity() {
             val actions = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, dp(10), 0, dp(8))
-                addView(action("dùng") { select(agent) })
-                addView(action("nhớ") { startActivity(MemoriesActivity.intent(this@AgentsActivity, agent.id, agent.name)) })
-                addView(action("nhân bản") { edit(null, template = agent) })
-                addView(action("xuất") { export(agent) })
+                addView(action("use") { select(agent) })
+                addView(action("memories") { startActivity(MemoriesActivity.intent(this@AgentsActivity, agent.id, agent.name)) })
+                addView(action("duplicate") { edit(null, template = agent) })
+                addView(action("export") { export(agent) })
                 if (!agent.builtin) {
-                    addView(action("sửa") { edit(agent) })
-                    addView(action("xóa") { confirmDelete(agent) })
+                    addView(action("edit") { edit(agent) })
+                    addView(action("delete") { confirmDelete(agent) })
                 }
             }
             column.addView(
@@ -132,7 +132,7 @@ class AgentsActivity : Activity() {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "Chia sẻ agent"))
+        startActivity(Intent.createChooser(intent, "Share agent"))
     }
 
     private fun edit(existing: AgentDefinition?, template: AgentDefinition? = existing) {
@@ -147,28 +147,28 @@ class AgentsActivity : Activity() {
             idField.second.isEnabled = false
             idField.second.alpha = 0.6f
         }
-        val nameField = input("tên", template?.name.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
-        val descriptionField = input("mô tả", template?.description.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
+        val nameField = input("name", template?.name.orEmpty(), singleLine = true).also { form.addView(it.first); form.addView(it.second) }
+        val descriptionField = input("description", template?.description.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
         val selectedTools = (template?.toolIds ?: emptySet()).toMutableSet()
-        form.addView(caption("tools (chọn capability)").apply { setPadding(0, dp(10), 0, dp(2)) })
+        form.addView(caption("tools (pick capabilities)").apply { setPadding(0, dp(10), 0, dp(2)) })
         form.addView(toolTags(selectedTools))
-        form.addView(caption("workspace, trí nhớ và vẽ hình luôn bật cho mọi agent · agent_management chỉ dành cho agent quản lý mặc định.").apply {
+        form.addView(caption("workspace, memory and drawing are always on for every agent · agent_management belongs to the built-in manager agent only.").apply {
             textSize = 13f
             setTextColor(Color.DKGRAY)
             setPadding(0, dp(4), 0, dp(2))
         })
         val greetingsField = input(
-            "greetings (mỗi dòng một câu)",
+            "greetings (one line each)",
             (template?.greetings ?: DEFAULT_AGENT_GREETINGS).joinToString("\n"),
             singleLine = false,
         ).also { form.addView(it.first); form.addView(it.second) }
-        // xem thử: đọc trực tiếp nội dung đang gõ (chưa lưu) để rút ngắn vòng lặp chỉnh-sửa-xem,
+        // "preview": đọc trực tiếp nội dung đang gõ (chưa lưu) để rút ngắn vòng lặp chỉnh-sửa-xem,
         // thay vì phải lưu agent rồi mở trang mới trên MainActivity mới thấy greeting trông ra sao.
         form.addView(
-            action("xem thử") {
+            action("preview") {
                 val candidates = parseGreetings(greetingsField.second.text.toString())
                 if (candidates.isEmpty()) {
-                    Toast.makeText(this, "chưa có câu greeting nào để xem thử", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "no greeting lines to preview yet", Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, candidates.random(), Toast.LENGTH_LONG).show()
                 }
@@ -177,10 +177,10 @@ class AgentsActivity : Activity() {
         val promptField = input("system prompt", template?.systemPrompt.orEmpty(), singleLine = false).also { form.addView(it.first); form.addView(it.second) }
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle(if (existing == null) "tạo agent" else "sửa agent")
+            .setTitle(if (existing == null) "new agent" else "edit agent")
             .setView(form)
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("lưu", null)
+            .setNegativeButton("cancel", null)
+            .setPositiveButton("save", null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -198,7 +198,7 @@ class AgentsActivity : Activity() {
                     dialog.dismiss()
                     render()
                 } else {
-                    AlertDialog.Builder(this).setMessage(error).setPositiveButton("được", null).show()
+                    AlertDialog.Builder(this).setMessage(error).setPositiveButton("ok", null).show()
                 }
             }
         }
@@ -207,11 +207,11 @@ class AgentsActivity : Activity() {
 
     private fun save(existing: AgentDefinition?, id: String, name: String, description: String, tools: Set<String>, greetings: String, prompt: String): String? =
         runCatching {
-            require(name.trim().isNotEmpty()) { "Tên agent không được trống." }
-            require(prompt.trim().isNotEmpty()) { "System prompt không được trống." }
-            require(existing?.builtin != true) { "Agent mặc định chỉ đọc." }
+            require(name.trim().isNotEmpty()) { "The agent needs a name." }
+            require(prompt.trim().isNotEmpty()) { "The system prompt cannot be empty." }
+            require(existing?.builtin != true) { "Built-in agents are read-only." }
             val parsedGreetings = parseGreetings(greetings)
-            require(parsedGreetings.isNotEmpty()) { "Agent cần ít nhất một câu greeting." }
+            require(parsedGreetings.isNotEmpty()) { "The agent needs at least one greeting line." }
             if (existing == null) {
                 val base = AgentStore.slugFor(id.ifBlank { name })
                 var unique = base
@@ -280,14 +280,14 @@ class AgentsActivity : Activity() {
     private fun confirmDelete(agent: AgentDefinition) {
         val memoryCount = readMemories(agent.workspace).size
         val message = if (memoryCount > 0) {
-            "Xóa ${agent.name}? $memoryCount điều đã nhớ sẽ mất theo. Không lấy lại được."
+            "Delete ${agent.name}? Its $memoryCount memories go with it. There is no undo."
         } else {
-            "Xóa ${agent.name} và toàn bộ workspace riêng của agent này?"
+            "Delete ${agent.name} and this agent's whole private workspace?"
         }
         AlertDialog.Builder(this)
             .setMessage(message)
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("xóa") { _, _ ->
+            .setNegativeButton("cancel", null)
+            .setPositiveButton("delete") { _, _ ->
                 store.delete(agent.id)
                 if (selection.read() == agent.id) selection.write("chat")
                 setResult(RESULT_OK)

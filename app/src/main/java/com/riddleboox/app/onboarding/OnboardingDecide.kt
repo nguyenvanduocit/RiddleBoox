@@ -20,7 +20,7 @@ fun decideOnboarding(
     caughtUp: Boolean,
     totalSegments: Int,
 ): OnboardingDecision {
-    require(totalSegments > 0) { "Onboarding cần ít nhất một đoạn." }
+    require(totalSegments > 0) { "Onboarding needs at least one segment." }
     return when (state) {
         is OnboardingState.Writing -> {
             if (!caughtUp) return OnboardingDecision(state, advance = false, finished = false)

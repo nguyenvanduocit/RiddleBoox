@@ -39,7 +39,7 @@ import java.io.File
  * url, api key — read straight off the [EditText] in [writeAndFinish]), a
  * preset picked from a short list (model, plus everything wrapped in
  * [EnumSettingRow]), or a self-contained toggle that writes through its own
- * store immediately ([PinField]) rather than waiting for "lưu". [dirty] and
+ * store immediately ([PinField]) rather than waiting for "save". [dirty] and
  * [writeAndFinish] only ever need to know about the first two.
  */
 class SettingsActivity : Activity() {
@@ -55,7 +55,7 @@ class SettingsActivity : Activity() {
     private lateinit var libraryField: TextView
     private var chosenModel: String = ""
 
-    /** cỡ chữ trả lời, cỡ chữ đọc lại, chế độ gửi — see [EnumSettingRow]. */
+    /** reply font size, transcript font size, send mode — see [EnumSettingRow]. */
     private lateinit var enumRows: List<EnumSettingRow<*>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,7 +90,7 @@ class SettingsActivity : Activity() {
             activity = this,
             entries = ReplyFontSize.entries,
             labelOf = ReplyFontSize::label,
-            dialogTitle = "cỡ chữ",
+            dialogTitle = "font size",
             read = fontSizeStore::read,
             write = fontSizeStore::write,
         )
@@ -99,7 +99,7 @@ class SettingsActivity : Activity() {
             activity = this,
             entries = TranscriptFontSize.entries,
             labelOf = TranscriptFontSize::label,
-            dialogTitle = "cỡ chữ đọc lại",
+            dialogTitle = "transcript font size",
             read = transcriptFontSizeStore::read,
             write = transcriptFontSizeStore::write,
         )
@@ -108,7 +108,7 @@ class SettingsActivity : Activity() {
             activity = this,
             entries = SendMode.entries,
             labelOf = SendMode::label,
-            dialogTitle = "chế độ gửi",
+            dialogTitle = "send mode",
             read = sendModeStore::read,
             write = sendModeStore::write,
         )
@@ -119,7 +119,7 @@ class SettingsActivity : Activity() {
 
         libraryField = statusField()
         val column = textBlock().apply {
-            addView(sectionHeader("kết nối"))
+            addView(sectionHeader("connection"))
             addView(field("base url", baseUrlField))
             addView(field("api key", apiKeyField))
             addView(field("model", modelField))
@@ -129,46 +129,46 @@ class SettingsActivity : Activity() {
             // resetConnectionDefaults().
             addView(
                 field(
-                    "khôi phục mặc định (base url + model)",
-                    chooserField("chạm để khôi phục") { resetConnectionDefaults() },
+                    "restore defaults (base url + model)",
+                    chooserField("tap to restore") { resetConnectionDefaults() },
                 ),
             )
 
-            addView(sectionHeader("đọc & viết"))
-            addView(field("cỡ chữ trả lời", fontSizeRow.field))
-            addView(field("cỡ chữ đọc lại", transcriptFontSizeRow.field))
-            addView(field("chế độ gửi", sendModeRow.field))
-            addView(field("sách trên máy", libraryField))
+            addView(sectionHeader("reading & writing"))
+            addView(field("reply font size", fontSizeRow.field))
+            addView(field("transcript font size", transcriptFontSizeRow.field))
+            addView(field("send mode", sendModeRow.field))
+            addView(field("books on this device", libraryField))
 
-            addView(sectionHeader("bảo mật & thông tin"))
+            addView(sectionHeader("security & info"))
             // Không tự finish() ở đây — gọi lại save() để không đánh mất các
             // field khác đang sửa dở trên cùng màn hình. save() lưu luôn mọi
-            // field khác trên màn hình này (base url, api key, model, cỡ chữ
-            // trả lời, cỡ chữ đọc lại, chế độ gửi), không chỉ riêng cờ
+            // field khác trên màn hình này (base url, api key, model, reply
+            // font size, transcript font size, send mode), không chỉ riêng cờ
             // onboarding — có chủ đích, không phải side effect ngoài ý muốn.
-            addView(field("giới thiệu", chooserField("chạm để xem lại") {
+            addView(field("introduction", chooserField("tap to replay") {
                 onboardingStore.write(false)
                 save()
             }))
             // Không đưa vào dirty()/save(): PinField ghi thẳng qua PinStore
-            // ngay khi chạm, không phải state chờ nút "lưu" ở đầu trang — một
-            // PIN vừa đặt mà "bỏ những thay đổi chưa lưu?" xoá mất là khoá giả.
-            addView(field("khoá bằng mã PIN", pinField.field))
+            // ngay khi chạm, không phải state chờ nút "save" ở đầu trang — một
+            // PIN vừa đặt mà "Discard unsaved changes?" xoá mất là khoá giả.
+            addView(field("PIN lock", pinField.field))
             // Đọc, ghi ra một file rồi mở share sheet ngay khi chạm — không có
-            // gì để "lưu" hay "bỏ", nên cũng đứng ngoài dirty()/save() như
-            // "giới thiệu" và "khoá bằng mã PIN" ở trên.
-            addView(field("sao lưu toàn bộ dữ liệu", chooserField("chạm để xuất") { backupAll() }))
+            // gì để "save" hay "discard", nên cũng đứng ngoài dirty()/save()
+            // như "introduction" và "PIN lock" ở trên.
+            addView(field("back up all data", chooserField("tap to export") { backupAll() }))
             // Đọc-chỉ-đọc, không thuộc dirty()/save(): chỉ để nhận dạng bản
             // build khi cần hỗ trợ ("bạn đang dùng bản nào?"), không phải một
             // setting có thể đổi.
-            addView(field("phiên bản", statusField().apply {
+            addView(field("version", statusField().apply {
                 text = "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})"
             }))
         }
-        // "lưu" rides in the running head rather than under the last field: the
+        // "save" rides in the running head rather than under the last field: the
         // soft keyboard eats the lower half of the screen while a field is
         // focused, and the head is the one strip of page it never covers.
-        setContentView(paperPage(runningHead("cấu hình", "lưu", onAction = { save() }) { leave() }, column))
+        setContentView(paperPage(runningHead("settings", "save", onAction = { save() }) { leave() }, column))
     }
 
     /**
@@ -186,9 +186,9 @@ class SettingsActivity : Activity() {
             return
         }
         AlertDialog.Builder(this)
-            .setMessage("Bỏ những thay đổi chưa lưu?")
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("bỏ") { _, _ -> finish() }
+            .setMessage("Discard unsaved changes?")
+            .setNegativeButton("cancel", null)
+            .setPositiveButton("discard") { _, _ -> finish() }
             .show()
     }
 
@@ -234,9 +234,9 @@ class SettingsActivity : Activity() {
         val canOpen = canOpenBooks()
         val where = if (canOpen) null else allFilesAccess(this)
         libraryField.text = when {
-            canOpen -> "đọc được cả chữ bên trong sách"
-            where != null -> "mới đọc được nhan đề, tiến độ và ghi chú — chạm để cho phép đọc cả sách"
-            else -> "máy này không có công tắc cho phép đọc file sách"
+            canOpen -> "can read the words inside your books"
+            where != null -> "can only see titles, progress and notes — tap to allow reading whole books"
+            else -> "this device has no switch for reading book files"
         }
         libraryField.isClickable = where != null
         libraryField.setOnClickListener(where?.let { screen -> View.OnClickListener { startActivity(screen) } })
@@ -254,11 +254,11 @@ class SettingsActivity : Activity() {
         if (looksLikeItHasTrailingV1(baseUrlField.text.toString())) {
             AlertDialog.Builder(this)
                 .setMessage(
-                    "Base URL này có vẻ kèm sẵn \"/v1\" ở cuối — có thể khiến mọi " +
-                        "yêu cầu tới API bị lỗi 404 âm thầm (xem README). Vẫn lưu?",
+                    "This base URL seems to end in \"/v1\" — every API request " +
+                        "may silently fail with a 404 (see README). Save anyway?",
                 )
-                .setNegativeButton("sửa lại", null)
-                .setPositiveButton("vẫn lưu") { _, _ -> writeAndFinish() }
+                .setNegativeButton("edit it", null)
+                .setPositiveButton("save anyway") { _, _ -> writeAndFinish() }
                 .show()
             return
         }
@@ -294,7 +294,7 @@ class SettingsActivity : Activity() {
      *
      * Not an [EnumSettingRow]: the shortlist's labels are composed from two
      * fields (`label` + `note`) rather than one, matching is by id rather
-     * than equality, and the neutral "nhập tay…" escape hatch has no
+     * than equality, and the neutral "type it in…" escape hatch has no
      * equivalent in a preset list — three differences, not a preset picker
      * with different words.
      */
@@ -307,7 +307,7 @@ class SettingsActivity : Activity() {
                 choose(choices[which])
                 dialog.dismiss()
             }
-            .setNeutralButton("nhập tay…") { _, _ -> promptCustomModel() }
+            .setNeutralButton("type it in…") { _, _ -> promptCustomModel() }
             .show()
     }
 
@@ -320,8 +320,8 @@ class SettingsActivity : Activity() {
      * Puts [defaults] — the build-time values from `local.properties`, read
      * once in [onCreate] — back onto the form for base url and model only.
      * Only the form changes here, same as every other field on this screen:
-     * nothing reaches [SettingsStore] until "lưu" is tapped, so a mis-tap
-     * just needs "bỏ những thay đổi chưa lưu?" in [leave], not an undo.
+     * nothing reaches [SettingsStore] until "save" is tapped, so a mis-tap
+     * just needs "Discard unsaved changes?" in [leave], not an undo.
      *
      * Deliberately leaves [apiKeyField] alone. The key on the form right now
      * may be the writer's own, pasted in by hand — not the build's default —
@@ -349,8 +349,8 @@ class SettingsActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("model")
             .setView(input)
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("dùng") { _, _ ->
+            .setNegativeButton("cancel", null)
+            .setPositiveButton("use") { _, _ ->
                 val id = input.text.toString().trim()
                 if (id.isNotEmpty()) {
                     chosenModel = id
@@ -383,7 +383,7 @@ class SettingsActivity : Activity() {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "Chia sẻ toàn bộ dữ liệu"))
+        startActivity(Intent.createChooser(intent, "Share the whole backup"))
     }
 
     companion object {

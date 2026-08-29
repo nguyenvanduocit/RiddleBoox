@@ -241,6 +241,68 @@ class RiddleStateMachineTest {
     }
 
     @Test
+    fun `the memorize label runs a housekeeping pass and records nothing`() {
+        FakeChatServer(FakeChatServer.stream("Ta đã ghi nhớ chuyện này.")).use { server ->
+            val h = harness(replySettings = ReplySettings(server.baseUrl, "sk-test", "openai/gpt-5.6-luna"))
+            h.machine.start()
+            h.tick(0)
+            h.driveUntilIdle() // greeting
+
+            h.busyEvents.clear()
+            h.panel.renders.clear()
+            h.machine.memorize()
+            h.driveUntilIdle()
+
+            assertTrue("busy the whole way through", h.busyEvents.dropLast(1).all { it })
+            assertEquals("idle exactly once, at the end", false, h.busyEvents.last())
+            assertTrue("the closing line reaches the page", h.panel.renders.any { it.replyStrokes.isNotEmpty() })
+            assertTrue("the pen reopens", h.pen.inputEnabledCalls.last())
+            assertTrue("a memory pass is never a turn", h.conversationStore.list().isEmpty())
+            assertTrue(h.statusEvents.any { it == "Committing to memory…" })
+            assertTrue(
+                "the note goes up in place of a page",
+                server.takeRequest().body.contains("put your kept memories in order"),
+            )
+            assertTrue("nothing was ever marked in flight", !PendingTurnMarker(h.root).consume())
+        }
+    }
+
+    /**
+     * The pass ends by blanking the page for its closing line, and ink not
+     * yet handed over must never be blanked out from under the writer.
+     */
+    @Test
+    fun `memorize is refused while unsent ink is on the page`() {
+        val h = harness()
+        h.machine.start()
+        h.tick(0)
+        h.driveUntilIdle() // greeting
+        h.strokeStore.beginStroke(com.riddleboox.app.ink.InkPoint(10f, 20f, 0.5f))
+        h.strokeStore.finishCurrent()
+
+        h.busyEvents.clear()
+        h.machine.memorize()
+
+        assertTrue("nothing starts; the ink stays the writer's", h.busyEvents.isEmpty())
+    }
+
+    @Test
+    fun `memorize without a configured key answers with an excuse and records nothing`() {
+        val h = harness(replySettings = null)
+        h.machine.start()
+        h.tick(0)
+        h.driveUntilIdle() // greeting
+
+        h.busyEvents.clear()
+        h.machine.memorize()
+        h.driveUntilIdle()
+
+        assertEquals(listOf(true, false), h.busyEvents)
+        assertTrue("an excuse is never a turn", h.conversationStore.list().isEmpty())
+        assertTrue("the pen reopens once the excuse is written", h.pen.inputEnabledCalls.last())
+    }
+
+    @Test
     fun `a 429 is retried and the diary answers once the throttle clears`() {
         FakeChatServer(
             FakeChatServer.error(429, "{\"error\":\"rate limited\"}"),
@@ -261,7 +323,7 @@ class RiddleStateMachineTest {
             assertEquals("Ta nghe.", conversations.single().turns.single().reply)
             assertTrue(
                 "the throttled attempt says so on the status line",
-                h.statusEvents.any { it.contains("Quá nhiều yêu cầu") },
+                h.statusEvents.any { it.contains("Too many requests") },
             )
         }
     }

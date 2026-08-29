@@ -420,16 +420,16 @@ class DiaryToolsTest {
     fun `each tool says what it is doing, quoting the book by name`() {
         val book = "Đắc Nhân Tâm"
         val captions = mapOf(
-            "search_library" to "Đang lần trên giá sách…",
-            "open_reader" to "Đang mở “$book”…",
-            "book_contents" to "Đang xem mục lục “$book”…",
-            "read_book" to "Đang đọc “$book”…",
-            "search_in_book" to "Đang lần trong “$book”…",
-            "read_highlights" to "Đang xem chỗ đã đánh dấu trong “$book”…",
-            "recall_diary" to "Đang lật lại những trang cũ…",
-            "delete_book" to "Đang bỏ đi “$book”…",
-            "delete_highlight" to "Đang xóa một chỗ đánh dấu…",
-            "forget_diary" to "Đang đốt một buổi tối cũ…",
+            "search_library" to "Feeling along the bookshelf…",
+            "open_reader" to "Opening “$book”…",
+            "book_contents" to "Looking at the contents of “$book”…",
+            "read_book" to "Reading “$book”…",
+            "search_in_book" to "Searching through “$book”…",
+            "read_highlights" to "Looking at the marked passages in “$book”…",
+            "recall_diary" to "Turning back through the old pages…",
+            "delete_book" to "Putting away “$book”…",
+            "delete_highlight" to "Erasing a marked passage…",
+            "forget_diary" to "Burning an old evening…",
         )
         for ((name, caption) in captions) {
             assertEquals(name, caption, note(name, "book" to book))
@@ -439,18 +439,18 @@ class DiaryToolsTest {
     /** No book named is a different sentence, not the same one with a blank in it. */
     @Test
     fun `read_highlights without a book is not narrowed to one`() {
-        assertEquals("Đang xem những chỗ đã đánh dấu…", note("read_highlights"))
+        assertEquals("Looking over the marked passages…", note("read_highlights"))
     }
 
     @Test
     fun `a named tool without a book still says what it is doing, just not to whom`() {
-        assertEquals("Đang mở sách…", note("open_reader"))
-        assertEquals("Đang bỏ đi sách…", note("delete_book"))
+        assertEquals("Opening a book…", note("open_reader"))
+        assertEquals("Putting away a book…", note("delete_book"))
     }
 
     @Test
     fun `a tool the model invented gets the same shrug as everything else unnamed`() {
-        assertEquals("Đang lần giở…", note("summon_basilisk"))
+        assertEquals("Leafing through…", note("summon_basilisk"))
     }
 }
 

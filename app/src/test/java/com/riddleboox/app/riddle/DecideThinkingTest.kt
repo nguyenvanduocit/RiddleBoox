@@ -91,7 +91,7 @@ class DecideThinkingTest {
         val decision = decide(before, now = 5_000, event = ReplyEvent.Lookup("search_library"))!!
 
         assertSame("the state is handed back untouched", before, decision.state)
-        assertEquals("Đang lần giở…", decision.effects.filterIsInstance<Effect.Status>().single().text)
+        assertEquals("Leafing through…", decision.effects.filterIsInstance<Effect.Status>().single().text)
     }
 
     /**
@@ -247,9 +247,9 @@ class DecideThinkingTest {
     /** What replaces the blot: the caption, worded by whoever did the looking. */
     @Test
     fun `a lookup says on the page which book is being opened`() {
-        val decision = decide(thinking(), now = 900, event = ReplyEvent.Lookup("read_book", "Đang đọc “Tiên Nghịch”…"))!!
+        val decision = decide(thinking(), now = 900, event = ReplyEvent.Lookup("read_book", "Reading “Tiên Nghịch”…"))!!
 
-        assertEquals("Đang đọc “Tiên Nghịch”…", decision.effects.filterIsInstance<Effect.Status>().single().text)
+        assertEquals("Reading “Tiên Nghịch”…", decision.effects.filterIsInstance<Effect.Status>().single().text)
         assertTrue("không được vẽ gì lên trang", decision.effects.filterIsInstance<Effect.Render>().isEmpty())
     }
 
@@ -258,6 +258,6 @@ class DecideThinkingTest {
     fun `a lookup with nothing to say falls back to a general caption`() {
         val decision = decide(thinking(), now = 900, event = ReplyEvent.Lookup("read_book"))!!
 
-        assertEquals("Đang lần giở…", decision.effects.filterIsInstance<Effect.Status>().single().text)
+        assertEquals("Leafing through…", decision.effects.filterIsInstance<Effect.Status>().single().text)
     }
 }

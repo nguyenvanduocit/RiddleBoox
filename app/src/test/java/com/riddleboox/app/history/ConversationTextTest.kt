@@ -20,7 +20,7 @@ class ConversationTextTest {
     fun `a single turn prints the writer's line then the diary's`() {
         val text = conversation(turn("Ten toi la Duoc", "Ta se nho.")).toPlainText()
 
-        assertEquals("Bạn: Ten toi la Duoc\nNhật ký: Ta se nho.", text)
+        assertEquals("You: Ten toi la Duoc\nDiary: Ta se nho.", text)
     }
 
     @Test
@@ -32,9 +32,9 @@ class ConversationTextTest {
         ).toPlainText()
 
         assertEquals(
-            "Bạn: Cau hoi mot\nNhật ký: Tra loi mot\n\n" +
-                "Bạn: Cau hoi hai\nNhật ký: Tra loi hai\n\n" +
-                "Bạn: Cau hoi ba\nNhật ký: Tra loi ba",
+            "You: Cau hoi mot\nDiary: Tra loi mot\n\n" +
+                "You: Cau hoi hai\nDiary: Tra loi hai\n\n" +
+                "You: Cau hoi ba\nDiary: Tra loi ba",
             text,
         )
     }
@@ -43,14 +43,14 @@ class ConversationTextTest {
     fun `a blank reply is left out instead of printed as an empty line`() {
         val text = conversation(turn("Cau hoi", "")).toPlainText()
 
-        assertEquals("Bạn: Cau hoi", text)
+        assertEquals("You: Cau hoi", text)
     }
 
     @Test
     fun `a blank transcript is left out instead of printed as an empty line`() {
         val text = conversation(turn("", "Tra loi")).toPlainText()
 
-        assertEquals("Nhật ký: Tra loi", text)
+        assertEquals("Diary: Tra loi", text)
     }
 
     @Test
@@ -74,13 +74,13 @@ class ConversationTextTest {
             turn("ba", "bon"),
         ).toPlainText()
 
-        assertTrue(text.contains("Bạn: mot"))
-        assertTrue(text.contains("Nhật ký: hai"))
-        assertTrue(text.contains("Bạn: ba"))
-        assertTrue(text.contains("Nhật ký: bon"))
+        assertTrue(text.contains("You: mot"))
+        assertTrue(text.contains("Diary: hai"))
+        assertTrue(text.contains("You: ba"))
+        assertTrue(text.contains("Diary: bon"))
         // Turn boundaries stay distinguishable: the second turn's writer line
         // is not glued onto the first turn's diary line.
-        assertFalse(text.contains("hai\nBạn: ba"))
+        assertFalse(text.contains("hai\nYou: ba"))
     }
 
     private val dayAndTime = SimpleDateFormat("d/M/yyyy · HH:mm", Locale.getDefault())
@@ -109,8 +109,8 @@ class ConversationTextTest {
         val wrongHeading = dayAndTime.format(Date(startedAtMs))
         assertTrue(text.contains(correctHeading))
         assertFalse(text.contains(wrongHeading))
-        assertTrue(text.contains("Bạn: Cau hoi"))
-        assertTrue(text.contains("Nhật ký: Tra loi"))
+        assertTrue(text.contains("You: Cau hoi"))
+        assertTrue(text.contains("Diary: Tra loi"))
     }
 
     @Test

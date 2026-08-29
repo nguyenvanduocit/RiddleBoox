@@ -22,7 +22,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -450,10 +449,10 @@ class BooxNotesTools(
     override suspend fun call(name: String, arguments: JsonObject): String = withContext(Dispatchers.IO) {
         runCatching {
             when (name) {
-                LIST_NOTES -> list(arguments.text("query"), arguments.int("limit", NOTES_LISTED))
-                SEARCH_NOTES -> search(arguments.text("query"), arguments.int("limit", SEARCH_RESULTS))
+                LIST_NOTES -> list(arguments.text("query"), arguments.count("limit", NOTES_LISTED))
+                SEARCH_NOTES -> search(arguments.text("query"), arguments.count("limit", SEARCH_RESULTS))
                 OPEN_NOTE -> openNoteInNotebook(arguments.text("note"))
-                READ_NOTE -> read(arguments.text("note"), arguments.int("page", 1))
+                READ_NOTE -> read(arguments.text("note"), arguments.count("page", 1))
                 DELETE_NOTE -> delete(arguments.text("note"))
                 CREATE_NOTE -> create(arguments.text("title"))
                 RENAME_NOTE -> rename(arguments.text("note"), arguments.text("title"))
@@ -463,14 +462,14 @@ class BooxNotesTools(
     }
 
     override fun note(name: String, arguments: JsonObject): String = when (name) {
-        LIST_NOTES -> "đang xem các note BOOX…"
-        SEARCH_NOTES -> "đang tìm trong note BOOX…"
-        OPEN_NOTE -> "đang mở Notebook BOOX…"
-        READ_NOTE -> "đang đọc note BOOX…"
-        DELETE_NOTE -> "đang xóa note BOOX…"
-        CREATE_NOTE -> "đang mở một cuốn sổ mới…"
-        RENAME_NOTE -> "đang đổi tên note BOOX…"
-        else -> "đang xem note BOOX…"
+        LIST_NOTES -> "looking over the BOOX notes…"
+        SEARCH_NOTES -> "searching the BOOX notes…"
+        OPEN_NOTE -> "opening BOOX Notebook…"
+        READ_NOTE -> "reading a BOOX note…"
+        DELETE_NOTE -> "deleting a BOOX note…"
+        CREATE_NOTE -> "opening a fresh notebook…"
+        RENAME_NOTE -> "renaming a BOOX note…"
+        else -> "looking at the BOOX notes…"
     }
 
     private suspend fun openNoteInNotebook(query: String): String {
@@ -616,11 +615,6 @@ class OpenAiBooxNotesVisionReader(
         return result.toString().trim()
     }
 }
-
-private fun JsonObject.text(name: String): String =
-    (this[name] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
-
-private fun JsonObject.int(name: String, fallback: Int): Int = text(name).toIntOrNull() ?: fallback
 
 private fun java.io.InputStream.readBounded(maxBytes: Int): ByteArray? {
     val output = java.io.ByteArrayOutputStream()

@@ -119,7 +119,7 @@ class OnyxLibrary(private val resolver: ContentResolver) : Library {
     ): List<T> {
         val uri = Uri.parse("content://$AUTHORITY/$table")
         val cursor = resolver.query(uri, columns, where, arguments, sort)
-            ?: throw LibraryUnreachable("$table không mở được qua $AUTHORITY")
+            ?: throw LibraryUnreachable("$table could not be opened through $AUTHORITY")
         return cursor.use { c ->
             val out = ArrayList<T>(c.count)
             while (c.moveToNext()) out.add(row(c))

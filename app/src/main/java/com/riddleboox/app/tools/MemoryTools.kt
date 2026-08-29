@@ -9,8 +9,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -168,7 +166,7 @@ class MemoryTools(
         runCatching {
             when (name) {
                 REMEMBER -> remember(arguments.text("content"))
-                RECALL_MEMORIES -> recall(arguments.text("query"), arguments.count("limit", MEMORIES_LISTED))
+                RECALL_MEMORIES -> recall(arguments.text("query"), arguments.count("limit", MEMORIES_LISTED, 1..100))
                 FORGET_MEMORY -> forget(arguments.text("id"))
                 else -> "There is nothing called $name in memory."
             }
@@ -176,10 +174,10 @@ class MemoryTools(
     }
 
     override fun note(name: String, arguments: JsonObject): String = when (name) {
-        REMEMBER -> "đang ghi nhớ…"
-        RECALL_MEMORIES -> "đang nhớ lại…"
-        FORGET_MEMORY -> "đang quên đi…"
-        else -> "đang xử lý trí nhớ…"
+        REMEMBER -> "committing this to memory…"
+        RECALL_MEMORIES -> "remembering…"
+        FORGET_MEMORY -> "forgetting…"
+        else -> "tending to memory…"
     }
 
     private fun remember(content: String): String {
@@ -236,9 +234,3 @@ class MemoryTools(
 
     private fun day(ms: Long): String = Instant.ofEpochMilli(ms).atZone(zone).format(DateTimeFormatter.ISO_LOCAL_DATE)
 }
-
-private fun JsonObject.text(name: String): String =
-    (this[name] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
-
-private fun JsonObject.count(name: String, fallback: Int): Int =
-    (this[name] as? JsonPrimitive)?.contentOrNull?.trim()?.toIntOrNull()?.coerceIn(1, 100) ?: fallback

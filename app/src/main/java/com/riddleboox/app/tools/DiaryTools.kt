@@ -14,13 +14,10 @@ import com.riddleboox.app.reply.Toolbox
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 
-// Tool names, used in the descriptors and again in the dispatch below.
 private const val SEARCH_LIBRARY = "search_library"
 private const val OPEN_READER = "open_reader"
 private const val BOOK_CONTENTS = "book_contents"
@@ -211,33 +208,31 @@ class DiaryTools(
      * a half-written page.
      */
     override suspend fun call(name: String, arguments: JsonObject): String = withContext(Dispatchers.IO) {
-        try {
+        runCatching {
             when (name) {
-                SEARCH_LIBRARY -> searchLibrary(arguments.text("query"), arguments.count("limit", BOOKS_LISTED))
+                SEARCH_LIBRARY -> searchLibrary(arguments.text("query"), arguments.count("limit", BOOKS_LISTED, 0..MOST))
                 OPEN_READER -> openBookInReader(arguments.text("book"))
                 BOOK_CONTENTS -> bookContents(arguments.text("book"))
                 // A chapter number and a character offset are positions in a
                 // book, not amounts asked for, so neither is held to [MOST].
                 READ_BOOK -> readBook(
                     arguments.text("book"),
-                    arguments.count("chapter", 1, most = Int.MAX_VALUE),
-                    arguments.count("offset", 0, most = Int.MAX_VALUE),
+                    arguments.count("chapter", 1),
+                    arguments.count("offset", 0),
                 )
                 SEARCH_IN_BOOK -> searchInBook(
                     arguments.text("book"),
                     arguments.text("query"),
-                    arguments.count("limit", PASSAGES_FOUND),
+                    arguments.count("limit", PASSAGES_FOUND, 0..MOST),
                 )
-                READ_HIGHLIGHTS -> readHighlights(arguments.text("book"), arguments.count("limit", MARKS_LISTED))
-                RECALL_DIARY -> recallDiary(arguments.text("query"), arguments.count("limit", EVENINGS_RECALLED))
+                READ_HIGHLIGHTS -> readHighlights(arguments.text("book"), arguments.count("limit", MARKS_LISTED, 0..MOST))
+                RECALL_DIARY -> recallDiary(arguments.text("query"), arguments.count("limit", EVENINGS_RECALLED, 0..MOST))
                 DELETE_BOOK -> deleteBook(arguments.text("book"), arguments.text("keep_file").equals("true", true))
                 DELETE_HIGHLIGHT -> deleteHighlight(arguments.text("id"))
                 FORGET_DIARY -> forgetDiary(arguments.text("id"), arguments.text("query"))
                 else -> "There is nothing called $name to consult."
             }
-        } catch (e: Exception) {
-            "That could not be looked up: ${e.message ?: e.javaClass.simpleName}"
-        }
+        }.getOrElse { error -> "That could not be looked up: ${error.message ?: error.javaClass.simpleName}" }
     }
 
     /**
@@ -252,22 +247,22 @@ class DiaryTools(
     override fun note(name: String, arguments: JsonObject): String {
         val book = arguments.text("book")
         return when (name) {
-            SEARCH_LIBRARY -> "Đang lần trên giá sách…"
-            OPEN_READER -> named("Đang mở", book)
-            BOOK_CONTENTS -> named("Đang xem mục lục", book)
-            READ_BOOK -> named("Đang đọc", book)
-            SEARCH_IN_BOOK -> named("Đang lần trong", book)
-            READ_HIGHLIGHTS -> if (book.isEmpty()) "Đang xem những chỗ đã đánh dấu…" else named("Đang xem chỗ đã đánh dấu trong", book)
-            RECALL_DIARY -> "Đang lật lại những trang cũ…"
-            DELETE_BOOK -> named("Đang bỏ đi", book)
-            DELETE_HIGHLIGHT -> "Đang xóa một chỗ đánh dấu…"
-            FORGET_DIARY -> "Đang đốt một buổi tối cũ…"
-            else -> "Đang lần giở…"
+            SEARCH_LIBRARY -> "Feeling along the bookshelf…"
+            OPEN_READER -> named("Opening", book)
+            BOOK_CONTENTS -> named("Looking at the contents of", book)
+            READ_BOOK -> named("Reading", book)
+            SEARCH_IN_BOOK -> named("Searching through", book)
+            READ_HIGHLIGHTS -> if (book.isEmpty()) "Looking over the marked passages…" else named("Looking at the marked passages in", book)
+            RECALL_DIARY -> "Turning back through the old pages…"
+            DELETE_BOOK -> named("Putting away", book)
+            DELETE_HIGHLIGHT -> "Erasing a marked passage…"
+            FORGET_DIARY -> "Burning an old evening…"
+            else -> "Leafing through…"
         }
     }
 
     private fun named(doing: String, book: String): String =
-        if (book.isEmpty()) "$doing sách…" else "$doing “$book”…"
+        if (book.isEmpty()) "$doing a book…" else "$doing “$book”…"
 
     // ---- the shelf ----
 
@@ -521,20 +516,4 @@ class DiaryTools(
         "No book on this reader answers to \"$query\". $SEARCH_LIBRARY will say what is there."
 
     private fun day(ms: Long): String = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate().toString()
-}
-
-/** A string argument, however the model chose to send it. */
-private fun JsonObject.text(name: String): String =
-    (this[name] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
-
-/**
- * A whole-number argument, clamped.
- *
- * Read out of the primitive's text rather than as a number because a model
- * asking for five books will as readily send `5` as `"5"`, and the difference
- * is not worth a failed lookup.
- */
-private fun JsonObject.count(name: String, fallback: Int, most: Int = MOST): Int {
-    val given = (this[name] as? JsonPrimitive)?.contentOrNull?.trim()?.toIntOrNull() ?: fallback
-    return given.coerceIn(0, most)
 }

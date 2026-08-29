@@ -34,7 +34,7 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
     private val domain = domain.trim().trimEnd('/').ifBlank { DEFAULT_DOMAIN }
 
     suspend fun search(query: String, page: Int = 1, count: Int = DEFAULT_COUNT): DilibSearchResult {
-        require(query.isNotBlank()) { "Cần từ khóa để tìm sách." }
+        require(query.isNotBlank()) { "A search needs a keyword." }
         val safePage = page.coerceAtLeast(1)
         val html = getHtml(searchUrl(domain, query, safePage))
         val result = DilibParser.parseSearchResults(html, domain, safePage)
@@ -48,7 +48,7 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
     suspend fun fetchBook(id: String): DilibBook {
         val number = id.trim().let { DilibParser.bookId(it) ?: it }
         require(number.isNotBlank() && number.all(Char::isDigit)) {
-            "Mã sách dilib phải là dãy số, ví dụ 403."
+            "A dilib book id is a string of digits, e.g. 403."
         }
         val html = getHtml("$domain/$number.html")
         return DilibParser.parseBookDetail(html, domain, number)
@@ -56,13 +56,13 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
 
     /** Downloads one file into the BOOX library folder and asks Android to index it. */
     suspend fun download(book: DilibBook, file: DilibFile, context: Context): File {
-        if (file.url.isBlank()) throw DilibException("Sách \"${book.title}\" không có đường tải xuống.")
+        if (file.url.isBlank()) throw DilibException("\"${book.title}\" has no download link.")
         val destination = File(Environment.getExternalStorageDirectory(), "Books")
         if (!destination.exists() && !destination.mkdirs()) {
-            throw DilibException("Không tạo được thư mục thư viện: ${destination.path}")
+            throw DilibException("Could not create the library folder: ${destination.path}")
         }
         if (!destination.isDirectory || !destination.canWrite()) {
-            throw DilibException("Không có quyền ghi vào thư viện: ${destination.path}")
+            throw DilibException("No permission to write into the library: ${destination.path}")
         }
 
         var lastError: Throwable? = null
@@ -70,17 +70,13 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
             try {
                 currentCoroutineContext().ensureActive()
                 return fetchInto(destination, book, file)
-            } catch (error: RetryableDownload) {
-                lastError = error
-                if (attempt == DOWNLOAD_RETRIES) break
-                delay(RETRY_DELAY_MS shl attempt)
             } catch (error: IOException) {
                 lastError = error
                 if (attempt == DOWNLOAD_RETRIES) break
                 delay(RETRY_DELAY_MS shl attempt)
             }
         }
-        throw DilibException("Không tải được sách sau ${DOWNLOAD_RETRIES + 1} lần thử.", lastError)
+        throw DilibException("The book would not download after ${DOWNLOAD_RETRIES + 1} attempts.", lastError)
     }
 
     private suspend fun fetchInto(destination: File, book: DilibBook, file: DilibFile): File {
@@ -94,7 +90,7 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
             if (isHtml(connection)) {
                 connection.disconnect()
                 throw DilibException(
-                    "Google Drive chưa trả về file cho \"${book.title}\"; hãy thử lại sau hoặc mở ${book.url} trên trình duyệt.",
+                    "Google Drive has not handed over the file for \"${book.title}\"; try again later or open ${book.url} in a browser.",
                 )
             }
         }
@@ -136,7 +132,7 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
         val code = connection.responseCode
         val body = responseBody(connection, code)
         connection.disconnect()
-        if (code !in 200..299) throw DilibException("dilib trả về HTTP $code.")
+        if (code !in 200..299) throw DilibException("dilib answered with HTTP $code.")
         return body
     }
 
@@ -154,7 +150,7 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
                 val location = connection.getHeaderField("Location")
                 connection.disconnect()
                 if (location.isNullOrBlank()) {
-                    throw DilibException("dilib chuyển hướng không có đích đến (HTTP $code).")
+                    throw DilibException("dilib redirected with no destination (HTTP $code).")
                 }
                 current = URI(current).resolve(location).toString()
                 return@repeat
@@ -164,11 +160,11 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
                 code == HttpURLConnection.HTTP_GATEWAY_TIMEOUT
             ) {
                 connection.disconnect()
-                throw RetryableDownload("máy chủ trả về HTTP $code")
+                throw RetryableDownload("the server answered with HTTP $code")
             }
             return connection
         }
-        throw DilibException("dilib chuyển hướng quá nhiều lần.")
+        throw DilibException("dilib redirected too many times.")
     }
 
     private fun open(url: String): HttpURLConnection {
@@ -230,7 +226,7 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
             val candidate = File(directory, "$base ($i)$ext")
             if (!candidate.exists()) return candidate
         }
-        throw DilibException("Có quá nhiều file trùng tên trong thư viện.")
+        throw DilibException("Too many files in the library share this name.")
     }
 
     private fun mimeType(extension: String): String = when (extension.lowercase(Locale.ROOT)) {

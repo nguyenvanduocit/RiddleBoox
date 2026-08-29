@@ -63,7 +63,9 @@ import com.riddleboox.app.tools.DilibTools
 import com.riddleboox.app.tools.DiaryTools
 import com.riddleboox.app.tools.BooxNotesTools
 import com.riddleboox.app.tools.BooxNote
+import com.riddleboox.app.tools.BooxStateTools
 import com.riddleboox.app.tools.MemoryTools
+import com.riddleboox.app.tools.OnyxBooxNotes
 import com.riddleboox.app.tools.OpenAiBooxNotesVisionReader
 import com.riddleboox.app.tools.StoredMemory
 import com.riddleboox.app.reply.Toolbox
@@ -108,7 +110,7 @@ class MainActivity : Activity() {
     private var onboardingController: OnboardingController? = null
     /** Whether the first-run introduction has already run; gates [onResume]/[onPause]. */
     private var onboardingSeen = true
-    /** Whether the "bắt đầu" button on the welcome screen has been tapped yet. */
+    /** Whether the "begin" button on the welcome screen has been tapped yet. */
     private var onboardingStarted = false
 
     private val inkCallbacks = object : InkCaptureController.Callbacks {
@@ -145,7 +147,7 @@ class MainActivity : Activity() {
         if (pendingTurnMarker.consume()) {
             Toast.makeText(
                 this,
-                "Trang trước có thể đã bị gián đoạn khi ứng dụng đóng — nội dung chưa chắc đã được lưu.",
+                "The last page may have been cut short when the app closed — what was written may not have been saved.",
                 Toast.LENGTH_LONG,
             ).show()
         }
@@ -153,7 +155,9 @@ class MainActivity : Activity() {
         agentStore = AgentStore(this)
         agentStore.ensureDefaults()
         val selectedId = AgentSelectionStore(this).read()
-        selectedAgent = agentStore.load(selectedId) ?: agentStore.load("chat")!!
+        selectedAgent = agentStore.load(selectedId) ?: checkNotNull(agentStore.load("chat")) {
+            "ensureDefaults() just created \"chat\" but its manifest is unreadable"
+        }
 
         penSurface = SurfaceView(this)
         regionView = RegionView(this)
@@ -176,26 +180,29 @@ class MainActivity : Activity() {
         }
         // It belongs to the status line, not to the controls at the far end:
         // what it stops is the thing the status line is reporting, and a word
-        // that acts on "đang viết…" has to stand next to those words to be
+        // that acts on "Writing a reply…" has to stand next to those words to be
         // read as answering them. Same plain caption style as every other
         // control on this line — it is only ever up while a turn is in
         // flight, so there is never another label beside it to confuse it with.
-        stopLabel = caption("dừng").apply {
+        stopLabel = caption("stop").apply {
             setPadding(dp(6), 0, dp(6), 0)
             visibility = View.GONE
             setOnClickListener { stateMachine.stopNow() }
         }
-        val sendLabel = caption("gửi").apply {
+        val sendLabel = caption("send").apply {
             setPadding(dp(6), 0, dp(6), 0)
             visibility = sendVisibility(sendMode)
         }
-        val newPageLabel = caption("trang mới").apply {
+        val newPageLabel = caption("new page").apply {
+            setPadding(dp(6), 0, dp(6), 0)
+        }
+        val memorizeLabel = caption("memorize").apply {
             setPadding(dp(6), 0, dp(6), 0)
         }
         val agentLabel = caption(selectedAgent.name.lowercase()).apply {
             setPadding(dp(6), 0, dp(6), 0)
         }
-        val historyLabel = caption("lịch sử").apply {
+        val historyLabel = caption("history").apply {
             setPadding(dp(6), 0, dp(6), 0)
         }
         val settingsLabel = caption("settings").apply {
@@ -228,7 +235,7 @@ class MainActivity : Activity() {
             // at the far end while the status and its stop label stay together
             // at this one.
             addView(View(this@MainActivity), LinearLayout.LayoutParams(0, dp(1), 1f))
-            listOf(sendLabel, newPageLabel).forEach {
+            listOf(sendLabel, newPageLabel, memorizeLabel).forEach {
                 addView(it, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -374,6 +381,7 @@ class MainActivity : Activity() {
 
         sendLabel.setOnClickListener { stateMachine.sendNow() }
         newPageLabel.setOnClickListener { stateMachine.newPage() }
+        memorizeLabel.setOnClickListener { stateMachine.memorize() }
         historyLabel.setOnClickListener {
             startActivityForResult(HistoryActivity.intent(this, selectedAgent.id), REQUEST_HISTORY)
         }
@@ -528,6 +536,12 @@ class MainActivity : Activity() {
                     ),
                 )
             }
+            // Neither capability alone is enough: this tool reads both the
+            // shelf and Notebook in one call, so it only appears once an
+            // agent can see both on their own.
+            if (AgentCapability.LIBRARY in selectedAgent.toolIds && AgentCapability.BOOX_NOTES in selectedAgent.toolIds) {
+                add(BooxStateTools(OnyxLibrary(contentResolver), OnyxBooxNotes(contentResolver)))
+            }
             // This check is intentionally stricter than the manifest alone:
             // no custom agent can gain awareness of the agent-management API.
             if (selectedAgent.builtin && selectedAgent.id == "agent-manager" &&
@@ -576,7 +590,6 @@ class MainActivity : Activity() {
      */
     private val attachRetry = Runnable { maybeAttach() }
 
-    /** The writing area is the whole screen — no margin held back from the pen. */
     /**
      * Where the pen is allowed to write: the page below the chrome.
      *

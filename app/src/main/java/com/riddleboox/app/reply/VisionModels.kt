@@ -38,46 +38,46 @@ val VISION_MODELS: List<VisionModel> = listOf(
     VisionModel(
         id = "openai/gpt-5.6-luna",
         label = "GPT-5.6 Luna",
-        note = "đọc chữ tay chuẩn nhất, giữ giọng nhật ký (~4s)",
+        note = "best at reading handwriting, keeps the diary's voice (~4s)",
         reasoning = ReasoningEffort.LOW,
     ),
     VisionModel(
         id = "openai/gpt-5.6-terra",
         label = "GPT-5.6 Terra",
-        note = "mạnh hơn Luna, đắt gấp 10",
+        note = "stronger than Luna, 10× the price",
         reasoning = ReasoningEffort.LOW,
     ),
     VisionModel(
         id = "google/gemini-3.7-flash",
         label = "Gemini 3.7 Flash",
-        note = "đọc tốt, nhanh (~5s) — hay tuột khỏi vai, xưng “tôi/bạn”",
+        note = "reads well, fast (~5s) — tends to slip out of character",
         reasoning = ReasoningEffort.LOW,
     ),
     VisionModel(
         id = "google/gemini-3.5-flash",
         label = "Gemini 3.5 Flash",
-        note = "đọc chuẩn, chậm nhất nhóm (~10s)",
+        note = "reads accurately, slowest of the group (~10s)",
         reasoning = ReasoningEffort.LOW,
     ),
     VisionModel(
         id = "anthropic/claude-sonnet-5",
         label = "Claude Sonnet 5",
-        note = "mạnh, chưa đo trên chữ tay tiếng Việt",
+        note = "strong, not yet measured on Vietnamese handwriting",
     ),
     VisionModel(
         id = "anthropic/claude-haiku-4.5",
         label = "Claude Haiku 4.5",
-        note = "nhanh, nhưng đọc rụng hết dấu tiếng Việt",
+        note = "fast, but drops Vietnamese diacritics when reading",
     ),
     VisionModel(
         id = "qwen/qwen3-vl-32b-instruct",
         label = "Qwen3-VL 32B",
-        note = "nhanh nhất (~2s), rẻ nhất — có khi đọc đảo ý câu",
+        note = "fastest (~2s), cheapest — sometimes reads a sentence's meaning backwards",
     ),
     VisionModel(
         id = "mistralai/mistral-medium-3.1",
         label = "Mistral Medium 3.1",
-        note = "chưa đo trên chữ tay tiếng Việt",
+        note = "not yet measured on Vietnamese handwriting",
     ),
 )
 
@@ -94,7 +94,7 @@ fun modelChoices(current: String): List<VisionModel> {
     return VISION_MODELS + VisionModel(
         id = current.trim(),
         label = current.trim(),
-        note = "đang dùng, đặt bằng tay",
+        note = "in use, set by hand",
     )
 }
 

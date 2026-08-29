@@ -110,7 +110,7 @@ class Epub private constructor(
                         Chapter(
                             title = titles[href]
                                 ?: heading(zip.text(entries, href, HEADING_BYTES))
-                                ?: "Phần ${i + 1}",
+                                ?: "Section ${i + 1}",
                             href = href,
                         )
                     },

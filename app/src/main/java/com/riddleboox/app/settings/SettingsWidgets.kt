@@ -50,8 +50,8 @@ internal fun Activity.statusField(): TextView = TextView(this).apply {
 }
 
 /**
- * A page break between clusters of related settings (kết nối, đọc & viết,
- * bảo mật & thông tin) — bigger and heavier than [caption], the field-label
+ * A page break between clusters of related settings (connection, reading &
+ * writing, security & info) — bigger and heavier than [caption], the field-label
  * type, so a glance down the page reads section boundaries before it reads
  * any one field's name. E-ink has no colour to lean on for this, only size,
  * weight and space.

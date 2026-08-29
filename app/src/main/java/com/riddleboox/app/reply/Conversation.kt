@@ -377,40 +377,7 @@ class Conversation(
         // the reply and begins the transcript may arrive in any of them, and
         // text written before a lookup is already ink on the page.
         val stream = TurnStream()
-        var request = page
-        var lookups = 0
-        while (true) {
-            val offered = if (lookups < maxLookups) toolbox?.tools.orEmpty() else emptyList()
-            val calls = ArrayList<StreamFrame.ToolCallComplete>()
-            client.executeStreaming(request, model, offered).collect { frame ->
-                when (frame) {
-                    is StreamFrame.TextDelta -> {
-                        val text = stream.accept(frame.text)
-                        if (text.isNotEmpty()) onReplyText(text)
-                    }
-                    is StreamFrame.ToolCallComplete -> calls.add(frame)
-                    else -> Unit
-                }
-            }
-            val box = toolbox
-            // Withholding the tools is what ends this loop: a round offered
-            // none cannot ask for one, so there is no way to go round again.
-            if (box == null || offered.isEmpty() || calls.isEmpty()) break
-
-            val found = calls.map { call ->
-                onLookup(call.name, box.note(call.name, call.contentJson))
-                call to box.call(call.name, call.contentJson)
-            }
-            lookups++
-            request = prompt(request) {
-                // All of a round's calls belong to one turn of the model's, and
-                // go back as one message: a tool result answers a call in the
-                // message before it, and splitting them puts results behind
-                // calls they do not belong to.
-                assistant { calls.forEach { toolCall(MessagePart.Tool.Call(it.id, it.name, it.content)) } }
-                found.forEach { (call, answer) -> toolResult(MessagePart.Tool.Result(call.id, call.name, answer)) }
-            }
-        }
+        streamTurn(page, stream, onReplyText, onLookup)
         val streamed = stream.finish()
         // The model normally supplies both the visible reply and the hidden
         // transcript in one stream. If it ignores the contract, recover the
@@ -435,6 +402,82 @@ class Conversation(
         val remembered = stripSvgBlocks(turn.reply).trim()
         if (remembered.isNotEmpty()) history = prompt(history) { assistant(remembered) }
         return turn
+    }
+
+    /**
+     * One housekeeping pass over the agent's kept memories, asked for by the
+     * writer rather than by a page: [instruction] goes up with the whole
+     * conversation behind it, the model puts its memory in order through the
+     * same lookup loop an ordinary turn uses, and its closing line comes back
+     * to be written out.
+     *
+     * Deliberately leaves [history] untouched. This exchange is the diary
+     * tending to itself, not a turn of the conversation, and a meta-exchange
+     * remembered as one would color every reply after it — the same reason a
+     * greeting never reaches the history. What the pass changed lives where
+     * it belongs, in the memory file the tools wrote.
+     *
+     * There is no page this turn, so the turn contract does not apply: a
+     * model that emits [TURN_SEPARATOR] anyway loses only what follows it,
+     * and one that omits it loses nothing.
+     */
+    suspend fun memorize(
+        instruction: String,
+        onLookup: (name: String, note: String) -> Unit = { _, _ -> },
+    ): String {
+        val request = prompt(history) { user(instruction) }.windowed(keptMessages)
+        val stream = TurnStream()
+        streamTurn(request, stream, onReplyText = {}, onLookup = onLookup)
+        return stream.finish().reply
+    }
+
+    /**
+     * Runs one turn's worth of requests, streaming the model's words into
+     * [stream]: a round that answers with a lookup instead of words has the
+     * lookup run and its result appended, and the model is asked again — up
+     * to [maxLookups] times, after which the tools are simply withheld and it
+     * has to answer with what it has.
+     */
+    private suspend fun streamTurn(
+        first: Prompt,
+        stream: TurnStream,
+        onReplyText: (String) -> Unit,
+        onLookup: (name: String, note: String) -> Unit,
+    ) {
+        var request = first
+        var lookups = 0
+        while (true) {
+            val offered = if (lookups < maxLookups) toolbox?.tools.orEmpty() else emptyList()
+            val calls = ArrayList<StreamFrame.ToolCallComplete>()
+            client.executeStreaming(request, model, offered).collect { frame ->
+                when (frame) {
+                    is StreamFrame.TextDelta -> {
+                        val text = stream.accept(frame.text)
+                        if (text.isNotEmpty()) onReplyText(text)
+                    }
+                    is StreamFrame.ToolCallComplete -> calls.add(frame)
+                    else -> Unit
+                }
+            }
+            val box = toolbox
+            // Withholding the tools is what ends this loop: a round offered
+            // none cannot ask for one, so there is no way to go round again.
+            if (box == null || offered.isEmpty() || calls.isEmpty()) return
+
+            val found = calls.map { call ->
+                onLookup(call.name, box.note(call.name, call.contentJson))
+                call to box.call(call.name, call.contentJson)
+            }
+            lookups++
+            request = prompt(request) {
+                // All of a round's calls belong to one turn of the model's, and
+                // go back as one message: a tool result answers a call in the
+                // message before it, and splitting them puts results behind
+                // calls they do not belong to.
+                assistant { calls.forEach { toolCall(MessagePart.Tool.Call(it.id, it.name, it.content)) } }
+                found.forEach { (call, answer) -> toolResult(MessagePart.Tool.Result(call.id, call.name, answer)) }
+            }
+        }
     }
 
     /** Re-reads only the page when the normal reply contract was not emitted. */

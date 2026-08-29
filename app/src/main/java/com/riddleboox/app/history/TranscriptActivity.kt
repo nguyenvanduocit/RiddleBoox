@@ -74,7 +74,7 @@ class TranscriptActivity : Activity() {
 
     /** What the writer wrote, upright and flush left, the way it sat on the page. */
     private fun written(transcript: String): TextView = TextView(this).apply {
-        text = transcript.ifBlank { "(mực nhoè)" }
+        text = transcript.ifBlank { "(smudged ink)" }
         textSize = fontSizeSp
         typeface = Typeface.SERIF
         setTextColor(Color.BLACK)
@@ -96,28 +96,28 @@ class TranscriptActivity : Activity() {
         orientation = LinearLayout.HORIZONTAL
         setPadding(0, dp(48), 0, 0)
         addView(
-            caption("tiếp tục").apply {
+            caption("continue").apply {
                 textSize = 16f
                 setPadding(0, dp(12), dp(40), dp(12))
                 setOnClickListener { resume() }
             },
         )
         addView(
-            caption("chia sẻ").apply {
+            caption("share").apply {
                 textSize = 16f
                 setPadding(0, dp(12), dp(40), dp(12))
                 setOnClickListener { share() }
             },
         )
         addView(
-            caption("sao chép").apply {
+            caption("copy").apply {
                 textSize = 16f
                 setPadding(0, dp(12), dp(40), dp(12))
                 setOnClickListener { copy() }
             },
         )
         addView(
-            caption("đốt").apply {
+            caption("burn").apply {
                 textSize = 16f
                 setPadding(dp(40), dp(12), dp(12), dp(12))
                 setOnClickListener { confirmBurn() }
@@ -135,7 +135,7 @@ class TranscriptActivity : Activity() {
      * hands the file to whatever the writer picks from the share sheet.
      *
      * Re-read from [store] rather than reusing [onCreate]'s already loaded
-     * conversation, so a tap on "chia sẻ" a while after the screen opened
+     * conversation, so a tap on "share" a while after the screen opened
      * still exports what is on disk right now, not a stale snapshot.
      *
      * The export lives under `cacheDir`, not `filesDir` where conversations
@@ -155,7 +155,7 @@ class TranscriptActivity : Activity() {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "Chia sẻ cuộc trò chuyện"))
+        startActivity(Intent.createChooser(intent, "Share this conversation"))
     }
 
     /**
@@ -170,8 +170,8 @@ class TranscriptActivity : Activity() {
     private fun copy() {
         val conversation = store.load(conversationId) ?: return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("cuộc trò chuyện", conversation.toPlainText()))
-        Toast.makeText(this, "Đã sao chép", Toast.LENGTH_SHORT).show()
+        clipboard.setPrimaryClip(ClipData.newPlainText("conversation", conversation.toPlainText()))
+        Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
     }
 
     /**
@@ -180,9 +180,9 @@ class TranscriptActivity : Activity() {
      */
     private fun confirmBurn() {
         AlertDialog.Builder(this)
-            .setMessage("Đốt cuộc trò chuyện này? Không lấy lại được.")
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("đốt") { _, _ ->
+            .setMessage("Burn this conversation? It cannot be brought back.")
+            .setNegativeButton("cancel", null)
+            .setPositiveButton("burn") { _, _ ->
                 store.delete(conversationId)
                 finish()
             }

@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.RectF
-import android.os.SystemClock
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View

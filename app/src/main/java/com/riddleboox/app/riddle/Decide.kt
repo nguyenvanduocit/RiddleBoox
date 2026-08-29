@@ -1,8 +1,8 @@
 package com.riddleboox.app.riddle
 
-import com.riddleboox.app.handwriting.WritePoint
 import com.riddleboox.app.ink.InkStroke
 import com.riddleboox.app.reply.plainText
+import com.riddleboox.app.reply.stripSvgBlocks
 import com.riddleboox.app.settings.SendMode
 
 /**
@@ -94,6 +94,14 @@ enum class StopAction {
      * as the reply the next page answers.
      */
     CutReply,
+
+    /**
+     * A memory pass is in flight and the page never left the writer's hands:
+     * drop the request and hand the page back exactly as it stands. Unlike
+     * [Discard] there is no dissolved page to make good on — the standing
+     * reply is still right there.
+     */
+    DropQuietly,
 }
 
 /** @see StopAction */
@@ -101,6 +109,7 @@ fun stopActionFor(state: RiddleState): StopAction = when (state) {
     is RiddleState.Listening -> StopAction.None
     is RiddleState.Drinking -> StopAction.Discard
     is RiddleState.Thinking -> StopAction.Discard
+    is RiddleState.Memorizing -> StopAction.DropQuietly
     is RiddleState.Replying -> StopAction.CutReply
 }
 
@@ -110,8 +119,8 @@ fun stopActionFor(state: RiddleState): StopAction = when (state) {
  * promises and what the tick actually does cannot drift apart.
  */
 fun idleStatus(mode: SendMode): String = when (mode) {
-    SendMode.Auto -> "Viết trong khung"
-    SendMode.Manual -> "Viết xong bấm gửi"
+    SendMode.Auto -> "Write inside the frame"
+    SendMode.Manual -> "Write, then tap send"
 }
 
 /**
@@ -185,7 +194,7 @@ fun decideDrinking(s: RiddleState.Drinking, now: Long): Decision? {
                 // The whole area changed at once, which is what GU is for: DU
                 // would leave it visibly dirty and GC would blink the panel.
                 Effect.Refresh(s.dirtyRect, RefreshMode.Quality),
-                Effect.Status("Đang nghĩ…"),
+                Effect.Status("Thinking…"),
             ),
         )
     }
@@ -239,7 +248,7 @@ fun decideThinking(
             effects = listOf(
                 Effect.BeginReply(REPLY_TOP_PX),
                 Effect.FeedReply(event.text),
-                Effect.Status("Đang viết trả lời…"),
+                Effect.Status("Writing a reply…"),
             ),
         )
 
@@ -259,7 +268,7 @@ fun decideThinking(
                     Effect.BeginReply(REPLY_TOP_PX),
                     Effect.FeedReply(event.text),
                     Effect.FlushReply,
-                    Effect.Status("Đang viết trả lời…"),
+                    Effect.Status("Writing a reply…"),
                 ),
             )
         }
@@ -271,7 +280,7 @@ fun decideThinking(
             state = s,
             effects = listOf(
                 Effect.Note("looking up: ${event.tool}"),
-                Effect.Status(event.note.ifBlank { "Đang lần giở…" }),
+                Effect.Status(event.note.ifBlank { "Leafing through…" }),
             ),
         )
 
@@ -293,6 +302,80 @@ fun decideThinking(
     return Decision(
         state = s.copy(retryAtMs = null),
         effects = listOf(Effect.AskDiary(pageInFlight)),
+    )
+}
+
+/**
+ * Waiting on a memory pass — [decideThinking]'s counterpart for the memorize
+ * label, and deliberately smaller.
+ *
+ * No retry, unlike Thinking: `remember` may already have run by the time a
+ * failure comes back, and running the pass again on a guess would keep the
+ * same facts twice. A failed pass cost nothing — no page was handed over —
+ * so the label itself is the retry, and failure just hands the page back.
+ *
+ * The closing line goes out through [Effect.WriteText], the greeting-and-
+ * excuse path, rather than the feed-and-flush a streamed reply uses: that is
+ * the one path [RiddleStateMachine] never records, and this exchange must
+ * never reach the conversation on disk — not even when the writer stops the
+ * pen mid-line.
+ */
+fun decideMemorizing(
+    s: RiddleState.Memorizing,
+    now: Long,
+    event: ReplyEvent?,
+): Decision? {
+    when (event) {
+        is ReplyEvent.Complete -> {
+            // The page still shows the standing reply; a reply is always
+            // revealed onto a clear page, so it comes off first — unless the
+            // page was already bare, when clearing it would only spend a
+            // refresh the writer is watching for the first word.
+            val standing = writeBounds(s.standingReply?.strokes ?: emptyList())
+            return Decision(
+                state = RiddleState.Replying(nextTickAtMs = now, lastArrivalAtMs = now, streamEnded = true),
+                effects = listOfNotNull(
+                    standing?.let { Effect.Render(PageRenderState.EMPTY) },
+                    standing?.let { Effect.Refresh(it, RefreshMode.Quality) },
+                    Effect.BeginReply(REPLY_TOP_PX),
+                    Effect.WriteText(plainText(stripSvgBlocks(event.text))),
+                    Effect.Status("Writing a reply…"),
+                ),
+            )
+        }
+
+        is ReplyEvent.Lookup -> return Decision(
+            state = s,
+            effects = listOf(
+                Effect.Note("memory pass: ${event.tool}"),
+                Effect.Status(event.note.ifBlank { "Committing to memory…" }),
+            ),
+        )
+
+        is ReplyEvent.Error -> return Decision(
+            state = RiddleState.Listening(standingReply = s.standingReply),
+            effects = listOf(
+                Effect.Note("memory pass failed: ${event.message}", warning = true),
+                Effect.PenInput(true),
+                Effect.Status("Could not commit to memory — tap memorize to try again"),
+            ),
+        )
+
+        // A memory pass streams no deltas — its one line arrives whole in
+        // Complete. One here is stale news from a request already abandoned.
+        is ReplyEvent.Delta -> return null
+
+        null -> Unit
+    }
+    if (now - s.startedAtMs < REPLY_PATIENCE_MS) return null
+    return Decision(
+        state = RiddleState.Listening(standingReply = s.standingReply),
+        effects = listOf(
+            Effect.AbandonRequest,
+            Effect.Note("memory pass timed out", warning = true),
+            Effect.PenInput(true),
+            Effect.Status("Could not commit to memory — tap memorize to try again"),
+        ),
     )
 }
 
@@ -325,9 +408,9 @@ private fun decideError(
                 Effect.Note("reply retry $attempt after: ${event.message}", warning = true),
                 Effect.Status(
                     when {
-                        rateLimited -> "Quá nhiều yêu cầu — đang chờ rồi thử lại (lần $attempt)…"
-                        unreachable -> "Mất kết nối — đang thử lại (lần $attempt)…"
-                        else -> "Trục trặc — thử lại $attempt/$REPLY_RETRY_LIMIT…"
+                        rateLimited -> "Too many requests — waiting, then retrying (attempt $attempt)…"
+                        unreachable -> "Connection lost — retrying (attempt $attempt)…"
+                        else -> "Something went wrong — retry $attempt/$REPLY_RETRY_LIMIT…"
                     },
                 ),
             ),
@@ -346,6 +429,6 @@ private fun excuse(reason: String, now: Long, page: PageRect) = Decision(
     effects = listOf(
         Effect.BeginReply(REPLY_TOP_PX),
         Effect.WriteText(excuseFor(reason)),
-        Effect.Status("Đang viết trả lời…"),
+        Effect.Status("Writing a reply…"),
     ),
 )

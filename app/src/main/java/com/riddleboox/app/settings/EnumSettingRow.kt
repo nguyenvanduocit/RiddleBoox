@@ -6,8 +6,8 @@ import android.widget.TextView
 
 /**
  * One settings row whose value is a preset picked from a short list — every
- * enum-backed setting on [SettingsActivity]'s page (cỡ chữ trả lời, cỡ chữ
- * đọc lại, chế độ gửi) is the same shape: read a store, remember what was
+ * enum-backed setting on [SettingsActivity]'s page (reply font size,
+ * transcript font size, send mode) is the same shape: read a store, remember what was
  * loaded against what the writer chose, and turn a tap into a single-choice
  * dialog. One class here replaces one copy of that shape per setting, so
  * adding the next one costs a single constructor call, not a new pick
@@ -31,7 +31,7 @@ internal class EnumSettingRow<T : Any>(
 
     val field: TextView = activity.chooserField(labelOf(loaded)) { pick() }
 
-    /** Compared by value, not identity: what [SettingsActivity.leave] asks "bỏ những thay đổi chưa lưu?" about. */
+    /** Compared by value, not identity: what [SettingsActivity.leave] asks "Discard unsaved changes?" about. */
     val dirty: Boolean get() = chosen != loaded
 
     fun save() = write(chosen)

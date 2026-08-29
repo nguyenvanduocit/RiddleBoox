@@ -30,7 +30,7 @@ import com.riddleboox.app.ui.textBlock
  *
  * A wrong PIN stays on this screen rather than finishing with a cancelled
  * result: the diary this guards has nowhere else to send a writer to try
- * again, so the retry loop lives here. [runningHead]'s default "‹ quay lại"
+ * again, so the retry loop lives here. [runningHead]'s default "‹ back"
  * still finishes the screen with no result set — that reads as
  * `RESULT_CANCELED`, which is fine today because nothing calls this screen
  * yet; whether back should be allowed at all is exactly the kind of decision
@@ -56,7 +56,7 @@ class LockActivity : Activity() {
             setPadding(0, dp(8), 0, dp(8))
         }
         // Hidden until the first wrong guess: an empty warning row would sit
-        // above the "mở khoá" caption on every visit, reading as if something
+        // above the "unlock" caption on every visit, reading as if something
         // had already gone wrong before the writer typed anything.
         warning = TextView(this).apply {
             textSize = 14f
@@ -70,7 +70,7 @@ class LockActivity : Activity() {
                 LinearLayout(this@LockActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(0, dp(32), 0, 0)
-                    addView(caption("mã PIN"))
+                    addView(caption("PIN"))
                     addView(
                         pinField,
                         LinearLayout.LayoutParams(
@@ -86,14 +86,14 @@ class LockActivity : Activity() {
             )
             addView(warning)
             addView(
-                caption("mở khoá").apply {
+                caption("unlock").apply {
                     textSize = 16f
                     setPadding(0, dp(32), 0, dp(12))
                     setOnClickListener { tryUnlock() }
                 },
             )
         }
-        setContentView(paperPage(runningHead("khoá"), column))
+        setContentView(paperPage(runningHead("locked"), column))
     }
 
     private fun tryUnlock() {
@@ -103,7 +103,7 @@ class LockActivity : Activity() {
             finish()
             return
         }
-        warning.text = "sai mã PIN"
+        warning.text = "wrong PIN"
         warning.visibility = View.VISIBLE
         pinField.text.clear()
         pinField.requestFocus()

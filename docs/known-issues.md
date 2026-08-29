@@ -289,3 +289,16 @@ time (a real regression could hide behind "oh, that one's flaky"); worth a
 tighter look if it recurs, not treated as this session's problem to fix per
 this repo's convention for test failures outside the file(s) actually being
 changed.
+
+**Recurred 2026-08-28 (~21:15), sibling test, different signature.** `an svg
+block streamed inside the reply becomes a drawn figure, not ink` failed with
+`did not settle back to Listening within 10000ms real time (last status:
+Thinking…)` — `driveUntilIdle`'s 10s *wall-clock* deadline expired while two
+Gradle builds shared the machine (another session was running
+`assembleRelease testReleaseUnitTest` on the same tree; the failing run's own
+log noted "2 busy Daemons"). Re-run alone immediately after: green, no code
+change in between. So this family of tests has two load-sensitive failure
+shapes, both in the harness's real-time waits, and neither reproduces solo.
+If a CI or a busy machine hits one, re-run the single test before suspecting
+the change in flight; a real fix would be scaling `driveUntilIdle`'s deadline
+with load or replacing wall-clock waits with virtual time.

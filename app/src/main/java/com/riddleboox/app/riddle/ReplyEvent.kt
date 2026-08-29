@@ -26,8 +26,8 @@ sealed class ReplyEvent {
      * mid-request — the pause is longer on purpose and the page says so.
      *
      * [tool] is for the log. [note] is what goes on the page, already worded
-     * for the writer by [com.riddleboox.app.reply.Toolbox.note] — "Đang giở
-     * Câu Chuyện Nghệ Thuật…" rather than "read_book". It has a default
+     * for the writer by [com.riddleboox.app.reply.Toolbox.note] — "Reading
+     * “Câu Chuyện Nghệ Thuật”…" rather than "read_book". It has a default
      * because a lookup with nothing to say about itself is still a lookup, and
      * the caption falls back to a general one.
      */

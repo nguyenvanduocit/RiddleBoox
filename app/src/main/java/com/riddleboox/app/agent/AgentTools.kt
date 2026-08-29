@@ -90,11 +90,11 @@ class AgentManagerTools(private val store: AgentStore) : Toolbox {
     }
 
     override fun note(name: String, arguments: JsonObject): String = when (name) {
-        LIST_AGENTS, READ_PROMPT -> "đang xem cấu hình agent…"
-        CREATE_AGENT -> "đang tạo agent…"
-        UPDATE_AGENT -> "đang cập nhật agent…"
-        DELETE_AGENT -> "đang xóa agent…"
-        else -> "đang quản lý agent…"
+        LIST_AGENTS, READ_PROMPT -> "looking over the agents…"
+        CREATE_AGENT -> "creating an agent…"
+        UPDATE_AGENT -> "updating an agent…"
+        DELETE_AGENT -> "deleting an agent…"
+        else -> "managing the agents…"
     }
 
     private fun listAgents(): String = store.list().joinToString("\n") { agent ->
@@ -171,7 +171,7 @@ class CompositeToolbox(private val boxes: List<Toolbox>) : Toolbox {
     override fun note(name: String, arguments: JsonObject): String =
         boxes.firstOrNull { box -> box.tools.any { it.name == name } }
             ?.note(name, arguments)
-            ?: "đang tra cứu…"
+            ?: "looking something up…"
 }
 
 private fun JsonObject.text(name: String): String =

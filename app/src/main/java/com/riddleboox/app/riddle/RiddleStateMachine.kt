@@ -6,7 +6,6 @@ import com.riddleboox.app.handwriting.HandwritingPlanner
 import com.riddleboox.app.handwriting.ReplyRevealCursor
 import com.riddleboox.app.handwriting.WriteCursor
 import com.riddleboox.app.handwriting.WritePlan
-import com.riddleboox.app.handwriting.WritePoint
 import com.riddleboox.app.handwriting.WriteStroke
 import com.riddleboox.app.history.ConversationStore
 import com.riddleboox.app.history.StoredConversation
@@ -28,6 +27,8 @@ import com.riddleboox.app.reply.svgOpenAt
 import com.riddleboox.app.reply.writableCut
 import com.riddleboox.app.settings.ReplySettings
 import com.riddleboox.app.settings.SendMode
+import com.riddleboox.app.tools.memorizeInstruction
+import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.tools.recentMemoriesText
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -334,6 +335,7 @@ class RiddleStateMachine(
             is RiddleState.Listening -> tickListening(s, now)
             is RiddleState.Drinking -> tickDrinking(s, now)
             is RiddleState.Thinking -> tickThinking(s, now)
+            is RiddleState.Memorizing -> tickMemorizing(s, now)
             is RiddleState.Replying -> tickReplying(s, now)
         }
     }
@@ -411,6 +413,67 @@ class RiddleStateMachine(
     }
 
     /**
+     * The writer asking the diary to put its kept memories in order — the
+     * memorize label on the chrome.
+     *
+     * A housekeeping pass, not a turn: the whole conversation so far goes up
+     * with the instruction and the memory tools do the work, but nothing is
+     * handed over and nothing reaches the conversation's history or the store
+     * on disk — see [Conversation.memorize] and [decideMemorizing]. The one
+     * visible trace is the diary's closing line, written out in its own hand
+     * in place of the standing reply. No [PendingTurnMarker] either: what the
+     * pass changed is already in the memory file the moment a tool ran, so a
+     * crash mid-pass loses nothing that was kept.
+     *
+     * Silent when there is ink on the page: the pass ends by blanking the
+     * page for that line, and ink not yet handed over must never be blanked
+     * out from under the writer — send it or turn to a new page first. Silent
+     * too while a turn is in flight, same as every other chrome action.
+     */
+    fun memorize() {
+        val s = state as? RiddleState.Listening ?: return
+        if (!strokeStore.isEmpty) return
+        val now = ticker.nowMs()
+        val diary = conversation
+        if (diary == null) {
+            // No voice to tend the memory: the same excuse an unanswerable
+            // page gets, written in place of the standing reply.
+            inkCapture.setInputEnabled(false)
+            panel.render(PageRenderState.EMPTY)
+            state = writeWholeReply(excuseFor("no key"), now, startYPx = REPLY_TOP_PX)
+            onStatusChanged("Replying (no LLM key configured)")
+            return
+        }
+        inkCapture.setInputEnabled(false)
+        // Bound to the queue live at launch, same as [requestReply].
+        val events = replyEvents
+        replyJob = replyScope.launch {
+            try {
+                // Read here, not on the click's thread: the memory file is
+                // disk, however small.
+                val instruction = memorizeInstruction(readMemories(agent.workspace))
+                val line = diary.memorize(
+                    instruction = instruction,
+                    onLookup = { tool, note -> events.add(ReplyEvent.Lookup(tool, note)) },
+                )
+                if (line.isBlank()) {
+                    events.add(ReplyEvent.Error("empty reply"))
+                } else {
+                    events.add(ReplyEvent.Complete(line, transcript = ""))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val message = e.message ?: e.javaClass.simpleName
+                Log.w(TAG, "memory pass failed: $message")
+                events.add(ReplyEvent.Error(message))
+            }
+        }
+        state = RiddleState.Memorizing(startedAtMs = now, standingReply = s.standingReply)
+        onStatusChanged("Committing to memory…")
+    }
+
+    /**
      * The way out of a turn that is taking too long, or has already said
      * enough — the label that calls this is on the chrome only while there is
      * something to stop.
@@ -418,7 +481,7 @@ class RiddleStateMachine(
      * What it means depends on how far the turn got, and that decision is
      * [stopActionFor] rather than a `when` here. Waiting: the request is
      * dropped and the page comes back blank, which is the same clean page
-     * "trang mới" gives. Writing: the pen stops where it stands and what it
+     * "new page" gives. Writing: the pen stops where it stands and what it
      * has written stays, because the writer has already read it.
      */
     fun stopNow() {
@@ -428,6 +491,14 @@ class RiddleStateMachine(
                 Log.i(TAG, "turn stopped before any of it was written")
                 clearPage()
                 state = RiddleState.Listening()
+                onStatusChanged(idleStatus())
+            }
+            StopAction.DropQuietly -> {
+                Log.i(TAG, "memory pass dropped by hand")
+                val standing = (state as? RiddleState.Memorizing)?.standingReply
+                abandonReply()
+                inkCapture.setInputEnabled(true)
+                state = RiddleState.Listening(standingReply = standing)
                 onStatusChanged(idleStatus())
             }
             StopAction.CutReply -> cutReplyShort()
@@ -547,7 +618,7 @@ class RiddleStateMachine(
                 now = now,
                 startYPx = replyStartBelow(committed, panel.drawingRect().height, lineHeightPx = replyLineHeightPx),
             )
-            onStatusChanged("Replying (chưa cấu hình LLM key)")
+            onStatusChanged("Replying (no LLM key configured)")
             return
         }
 
@@ -569,7 +640,7 @@ class RiddleStateMachine(
             stage = 0,
             nextStageAtMs = now + DRINK_STAGE_MS,
         )
-        onStatusChanged("Đang uống mực…")
+        onStatusChanged("Drinking the ink…")
     }
 
     private fun requestReply(strokes: List<InkStroke>) {
@@ -594,7 +665,7 @@ class RiddleStateMachine(
                     onReplyText = { delta -> events.add(ReplyEvent.Delta(delta)) },
                     onLookup = { tool, note -> events.add(ReplyEvent.Lookup(tool, note)) },
                     onContractRepair = {
-                        events.add(ReplyEvent.Lookup("transcribe_page", "đang đọc lại chữ trên trang…"))
+                        events.add(ReplyEvent.Lookup("transcribe_page", "reading the page again…"))
                     },
                 )
                 Log.i(
@@ -634,6 +705,12 @@ class RiddleStateMachine(
             pageInFlight = lastCommittedStrokes,
         )
         carryOut(decision ?: return)
+    }
+
+    // ---- Memorizing: no main.rs ancestor — the memorize label is this port's own ----
+
+    private fun tickMemorizing(s: RiddleState.Memorizing, now: Long) {
+        carryOut(decideMemorizing(s, now, replyEvents.poll()) ?: return)
     }
 
     /**

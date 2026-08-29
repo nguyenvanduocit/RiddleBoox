@@ -48,7 +48,7 @@ import java.util.Locale
  * than another screen.
  *
  * Forgetting no longer requires going back to the page and asking the agent
- * to call `forget_memory` itself: the detail dialog offers "quên đi" too,
+ * to call `forget_memory` itself: the detail dialog offers "forget" too,
  * writing straight to `memories.jsonl` via [writeMemories] — the same atomic
  * rewrite [com.riddleboox.app.tools.MemoryTools] uses, just without its
  * id-prefix guessing, since here the exact [MemoryEntry.id] shown is the one
@@ -64,7 +64,7 @@ import java.util.Locale
  * [onResume] last read, unnarrowed, and [searchField] filters it in memory
  * on every keystroke via [com.riddleboox.app.tools.matching] rather than
  * re-reading the store — a memory list grows the same way a history does,
- * and deserves the same way back to one entry in it. A "xoá" caption beside
+ * and deserves the same way back to one entry in it. A "clear" caption beside
  * the field appears only once there is text to clear, so getting back to
  * the full list never requires deleting a query by hand.
  */
@@ -95,7 +95,7 @@ class MemoriesActivity : Activity() {
             )
             addView(column)
         }
-        setContentView(paperPage(runningHead("$agentName · đã nhớ", "xuất tất cả", onAction = { exportAll() }), body))
+        setContentView(paperPage(runningHead("$agentName · memories", "export all", onAction = { exportAll() }), body))
     }
 
     override fun onResume() {
@@ -116,10 +116,10 @@ class MemoriesActivity : Activity() {
      * same [dp]`(48)` left/right inset now splits between the two views
      * instead of living on [searchField] alone: the field carries it on the
      * left, the row itself carries it on the right, so the margin holds
-     * steady whether or not "xoá" is showing rather than collapsing when a
+     * steady whether or not "clear" is showing rather than collapsing when a
      * `GONE` view drops its own padding.
      *
-     * "xoá" is a [caption] rather than a bespoke icon button — no image
+     * "clear" is a [caption] rather than a bespoke icon button — no image
      * assets in this app, and a caption is already how every other action
      * in the chrome (see [com.riddleboox.app.ui.runningHead]) reads on
      * BOOX's panel. It starts `GONE` and only turns `VISIBLE` once there is
@@ -128,13 +128,13 @@ class MemoriesActivity : Activity() {
      * construction rather than by a second listener to keep in sync.
      */
     private fun searchRow(): View {
-        val clear = caption("xoá").apply {
+        val clear = caption("clear").apply {
             visibility = View.GONE
             setPadding(dp(16), dp(24), 0, dp(8))
             setOnClickListener { searchField.text?.clear() }
         }
         searchField = EditText(this).apply {
-            hint = "tìm trong đã nhớ"
+            hint = "search memories"
             setSingleLine()
             textSize = 17f
             setTextColor(Color.BLACK)
@@ -170,7 +170,7 @@ class MemoriesActivity : Activity() {
         if (entries.isEmpty()) {
             column.addView(
                 TextView(this).apply {
-                    text = "agent này chưa nhớ điều gì"
+                    text = "this agent has not remembered anything yet"
                     textSize = 18f
                     typeface = Typeface.SERIF
                     setTextColor(Color.BLACK)
@@ -220,27 +220,27 @@ class MemoriesActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle(DAY_AND_TIME.format(Date(entry.ms)))
             .setMessage(entry.content)
-            .setPositiveButton("được", null)
-            .setNegativeButton("quên đi") { _, _ -> confirmForget(entry) }
-            .setNeutralButton("sao chép") { _, _ -> copy(entry) }
+            .setPositiveButton("ok", null)
+            .setNegativeButton("forget") { _, _ -> confirmForget(entry) }
+            .setNeutralButton("copy") { _, _ -> copy(entry) }
             .show()
     }
 
     private fun copy(entry: MemoryEntry) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("điều đã nhớ", entry.content))
-        Toast.makeText(this, "Đã sao chép", Toast.LENGTH_SHORT).show()
+        clipboard.setPrimaryClip(ClipData.newPlainText("memory", entry.content))
+        Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
     }
 
     /**
      * Asked before removing, same as [com.riddleboox.app.history.TranscriptActivity]'s
-     * "đốt": the file is the only copy, and there is no undo.
+     * "burn": the file is the only copy, and there is no undo.
      */
     private fun confirmForget(entry: MemoryEntry) {
         AlertDialog.Builder(this)
-            .setMessage("Quên điều này? Không lấy lại được.\n\n${entry.content}")
-            .setNegativeButton("thôi", null)
-            .setPositiveButton("quên") { _, _ -> forget(entry) }
+            .setMessage("Forget this? It cannot be brought back.\n\n${entry.content}")
+            .setNegativeButton("cancel", null)
+            .setPositiveButton("forget") { _, _ -> forget(entry) }
             .show()
     }
 
@@ -255,11 +255,11 @@ class MemoriesActivity : Activity() {
      * Writes every memory for [agentId] out as one plain-text file under
      * `cacheDir/exports` and hands it to the share sheet — the same shape as
      * [com.riddleboox.app.history.HistoryActivity.exportAll], the diary's own
-     * "xuất tất cả".
+     * "export all".
      *
      * Re-reads [workspace] rather than [allEntries], for the same reason
      * [com.riddleboox.app.history.HistoryActivity.exportAll] re-reads its
-     * store: a tap on "xuất tất cả" a while after the screen opened should
+     * store: a tap on "export all" a while after the screen opened should
      * export what's on disk right now.
      */
     private fun exportAll() {
@@ -274,7 +274,7 @@ class MemoriesActivity : Activity() {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(intent, "Chia sẻ những điều đã nhớ"))
+        startActivity(Intent.createChooser(intent, "Share memories"))
     }
 
     companion object {

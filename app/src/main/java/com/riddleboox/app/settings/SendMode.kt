@@ -11,8 +11,8 @@ import android.content.Context
  * leaves the moment to the writer, who says so on the page's own chrome.
  */
 enum class SendMode(val label: String) {
-    Auto("tự động"),
-    Manual("thủ công"),
+    Auto("automatic"),
+    Manual("manual"),
 }
 
 private const val PREFS_FILE = "page_settings"

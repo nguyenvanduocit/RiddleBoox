@@ -53,7 +53,7 @@ class CompositeToolboxTest {
 
         assertEquals("đang tìm sách…", composite.note("search_library", noArgs))
         assertEquals("đang đọc…", composite.note("workspace_read", noArgs))
-        assertEquals("đang tra cứu…", composite.note("ghost_tool", noArgs))
+        assertEquals("looking something up…", composite.note("ghost_tool", noArgs))
     }
 
     @Test
@@ -81,7 +81,7 @@ class CompositeToolboxTest {
 
         assertTrue(composite.tools.isEmpty())
         assertEquals("There is nothing called anything to consult.", call(composite, "anything"))
-        assertEquals("đang tra cứu…", composite.note("anything", noArgs))
+        assertEquals("looking something up…", composite.note("anything", noArgs))
     }
 }
 

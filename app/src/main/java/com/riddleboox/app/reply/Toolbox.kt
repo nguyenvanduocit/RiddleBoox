@@ -30,8 +30,8 @@ interface Toolbox {
      * The lookup is the longest silence in a turn — a whole extra request, and
      * on a slow panel several seconds of nothing. What makes that silence
      * bearable is not a mark that moves but knowing what is being done, so this
-     * is given the arguments too: "đang giở Câu Chuyện Nghệ Thuật" is a wait
-     * the writer understands, "đang lần giở" is one they only endure.
+     * is given the arguments too: "Reading “Câu Chuyện Nghệ Thuật”…" is a wait
+     * the writer understands, "Leafing through…" is one they only endure.
      */
     fun note(name: String, arguments: JsonObject): String
 }

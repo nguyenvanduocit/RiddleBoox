@@ -16,6 +16,10 @@ import com.riddleboox.app.ink.InkStroke
  * the way a conversation on paper actually reads. Both hands of ink — the
  * writer's new page and the diary's standing reply — dissolve together when the
  * next turn is committed, so the page is clear for the answer to it.
+ *
+ * [Memorizing] is the one side path, with no main.rs ancestor: Listening ->
+ * Memorizing -> Replying -> Listening, entered from the memorize label rather
+ * than from ink, skipping Drinking because no page was handed over.
  */
 sealed class RiddleState {
 
@@ -63,6 +67,22 @@ sealed class RiddleState {
         val startedAtMs: Long,
         val retryCount: Int = 0,
         val retryAtMs: Long? = null,
+    ) : RiddleState()
+
+    /**
+     * Waiting while the diary puts its kept memories in order against the
+     * conversation so far — the writer tapped memorize
+     * ([RiddleStateMachine.memorize]), asking for housekeeping rather than an
+     * answer to a page. Nothing was handed over, so the page stays exactly as
+     * it stood; [standingReply] rides here so a pass that fails can hand it
+     * back to [Listening] untouched. No retry fields: memory tools have
+     * already run by the time a failure comes back, and running the pass
+     * again on a guess would keep the same facts twice — see
+     * [decideMemorizing].
+     */
+    data class Memorizing(
+        val startedAtMs: Long,
+        val standingReply: WritePlan? = null,
     ) : RiddleState()
 
     /**

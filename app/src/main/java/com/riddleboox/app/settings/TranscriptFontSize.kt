@@ -8,10 +8,10 @@ import android.content.Context
  * for a plain `TextView` on the read-back screen, not the writing page.
  */
 enum class TranscriptFontSize(val sp: Float, val label: String) {
-    Small(16f, "nhỏ"),
-    Medium(19f, "vừa — mặc định"),
-    Large(23f, "lớn"),
-    ExtraLarge(27f, "rất lớn"),
+    Small(16f, "small"),
+    Medium(19f, "medium — default"),
+    Large(23f, "large"),
+    ExtraLarge(27f, "extra large"),
     ;
 
     companion object {

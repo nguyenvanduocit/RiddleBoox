@@ -8,10 +8,10 @@ import android.content.Context
  * working setup turns into unreadable ink or a page that holds three words.
  */
 enum class ReplyFontSize(val px: Float, val label: String) {
-    Small(48f, "nhỏ"),
-    Medium(64f, "vừa — mặc định"),
-    Large(80f, "lớn"),
-    ExtraLarge(96f, "rất lớn"),
+    Small(48f, "small"),
+    Medium(64f, "medium — default"),
+    Large(80f, "large"),
+    ExtraLarge(96f, "extra large"),
     ;
 
     companion object {

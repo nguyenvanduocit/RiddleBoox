@@ -29,7 +29,7 @@ private const val AGENT_RULE = "----------------------------------------"
  * [com.riddleboox.app.history.HistoryActivity.exportAll] and
  * [com.riddleboox.app.MemoriesActivity]'s own export both stop at the single
  * agent they were opened for, and [com.riddleboox.app.AgentsActivity]'s
- * "xuất" hands over one definition at a time. On a tablet with no cloud sync
+ * "export" hands over one definition at a time. On a tablet with no cloud sync
  * of its own, this is the only way off the device that isn't "copy every
  * agent by hand".
  *
@@ -47,20 +47,20 @@ fun wholeDiaryBackup(
     memories: Map<String, List<MemoryEntry>>,
     exportedAtMs: Long,
 ): String {
-    val header = "SAO LƯU RIDDLEBOOX — ${EXPORT_DAY_AND_TIME.format(Date(exportedAtMs))}"
-    val agentsBlock = "CÁC AGENT (${agents.size})\n\n" +
+    val header = "RIDDLEBOOX BACKUP — ${EXPORT_DAY_AND_TIME.format(Date(exportedAtMs))}"
+    val agentsBlock = "AGENTS (${agents.size})\n\n" +
         agents.joinToString(separator = "\n\n$AGENT_RULE\n\n") { it.toPlainText() }
-    val conversationsBlock = perAgentBlock("HỘI THOẠI", agents) { agent ->
+    val conversationsBlock = perAgentBlock("CONVERSATIONS", agents) { agent ->
         conversations.filter { it.agentId == agent.id }.toPlainText()
     }
-    val memoriesBlock = perAgentBlock("GHI NHỚ", agents) { agent ->
+    val memoriesBlock = perAgentBlock("MEMORIES", agents) { agent ->
         memories[agent.id].orEmpty().toPlainText()
     }
     return listOf(header, agentsBlock, conversationsBlock, memoriesBlock).joinToString(separator = "\n\n\n")
 }
 
 /**
- * One section of the backup (hội thoại, ghi nhớ), one block per agent that
+ * One section of the backup (conversations, memories), one block per agent that
  * actually has something in it — an agent nobody has written to yet does not
  * get an empty heading, the same reasoning [wholeDiaryBackup]'s own
  * `toPlainText` callees use for a blank list.
@@ -69,6 +69,6 @@ private fun perAgentBlock(title: String, agents: List<AgentDefinition>, bodyFor:
     val perAgent = agents.mapNotNull { agent ->
         bodyFor(agent).takeIf { it.isNotBlank() }?.let { "${agent.name}\n\n$it" }
     }
-    if (perAgent.isEmpty()) return "$title\n\n(chưa có gì)"
+    if (perAgent.isEmpty()) return "$title\n\n(nothing yet)"
     return "$title\n\n" + perAgent.joinToString(separator = "\n\n$AGENT_RULE\n\n")
 }
