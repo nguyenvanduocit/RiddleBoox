@@ -1,15 +1,19 @@
 package com.riddleboox.app.settings
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.riddleboox.app.BuildConfig
 import com.riddleboox.app.agent.AgentStore
@@ -38,12 +42,13 @@ import java.io.File
  * `BuildConfig` directly — see [intent] — except for the version line at the
  * bottom of the page, which is read-only display with no default to override.
  *
- * Every row on the page is one of three shapes: a plain text field (api key,
- * the custom base url — read straight off the [EditText] in [writeAndFinish]),
- * a choice picked from a list (base url's provider, model, plus everything
- * wrapped in [EnumSettingRow]), or a self-contained toggle that writes through
- * its own store immediately ([PinField]) rather than waiting for "save".
- * [dirty] and [writeAndFinish] only ever need to know about the first two.
+ * Every row on the page is one of three shapes: a plain text field (api key),
+ * a choice picked from a list — base url and model both offer the same
+ * two-named-choices-plus-"type it in…" shape, see [pickBaseUrl]/[pickModel] —
+ * plus everything wrapped in [EnumSettingRow], or a self-contained toggle that
+ * writes through its own store immediately ([PinField]) rather than waiting
+ * for "save". [dirty] and [writeAndFinish] only ever need to know about the
+ * first two.
  */
 class SettingsActivity : Activity() {
 
@@ -53,19 +58,21 @@ class SettingsActivity : Activity() {
     /** What was on the page when it opened — the thing [dirty] compares against. */
     private lateinit var loaded: ReplySettings
     private lateinit var baseUrlChooser: TextView
-    private lateinit var baseUrlField: EditText
-
-    /** The "custom base url" row, on the page only while [chosenProvider] is null. */
-    private lateinit var customBaseUrlRow: View
     private lateinit var apiKeyField: EditText
     private lateinit var modelField: TextView
     private lateinit var libraryField: TextView
 
-    /** The named server picked on the base-url row; null means "other", typed into [baseUrlField]. */
+    /** Whether [checkPermissions] has already asked for the legacy storage permissions this screen visit. */
+    private var askedForStoragePermissions = false
+
+    /** The named server picked on the base-url row; null means "other", typed via [promptCustomBaseUrl]. */
     private var chosenProvider: Provider? = null
+
+    /** What "other" resolves to — set only by [promptCustomBaseUrl], the same way [chosenModel] backs [modelField]. */
+    private var customBaseUrl: String = ""
     private var chosenModel: String = ""
 
-    /** reply font size, send mode — see [EnumSettingRow]. */
+    /** reply font size, send mode, pen style, stroke width — see [EnumSettingRow]. */
     private lateinit var enumRows: List<EnumSettingRow<*>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,11 +89,8 @@ class SettingsActivity : Activity() {
         loaded = current
 
         chosenProvider = providerFor(current.baseUrl)
+        customBaseUrl = current.baseUrl
         baseUrlChooser = chooserField("") { pickBaseUrl() }
-        baseUrlField = valueField(
-            current.baseUrl,
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI,
-        )
         // Masked: the key is a bearer token to a billed account, and settings
         // is the one screen that gets opened while someone else is helping
         // with the setup. A doubted character is cheaper re-pasted than shown.
@@ -115,27 +119,45 @@ class SettingsActivity : Activity() {
             read = sendModeStore::read,
             write = sendModeStore::write,
         )
-        enumRows = listOf(fontSizeRow, sendModeRow)
+        val penStyleStore = PenStyleStore(this)
+        val penStyleRow = EnumSettingRow(
+            activity = this,
+            entries = PenStyle.entries,
+            labelOf = PenStyle::label,
+            dialogTitle = "pen style",
+            read = penStyleStore::read,
+            write = penStyleStore::write,
+        )
+        val penWidthStore = PenStrokeWidthStore(this)
+        val penWidthRow = EnumSettingRow(
+            activity = this,
+            entries = PenStrokeWidth.entries,
+            labelOf = PenStrokeWidth::label,
+            dialogTitle = "stroke width",
+            read = penWidthStore::read,
+            write = penWidthStore::write,
+        )
+        enumRows = listOf(fontSizeRow, sendModeRow, penStyleRow, penWidthRow)
 
         val onboardingStore = OnboardingStore(this)
         val pinField = PinField(this)
 
         libraryField = statusField()
-        customBaseUrlRow = field("custom base url", baseUrlField)
         showBaseUrl()
         val column = textBlock().apply {
             // "restore defaults" rides the section title because it acts on
             // the section as a whole: base url and model together — never the
             // api key, see resetConnectionDefaults().
-            addView(sectionHeader("connection", "restore defaults") { resetConnectionDefaults() })
+            addView(sectionHeader("AI model", "restore defaults") { resetConnectionDefaults() })
             addView(field("base url", baseUrlChooser))
-            addView(customBaseUrlRow)
             addView(field("api key", apiKeyField))
             addView(field("model", modelField))
 
             addView(sectionHeader("reading & writing"))
             addView(field("reply font size", fontSizeRow.field))
             addView(field("send mode", sendModeRow.field))
+            addView(field("pen style", penStyleRow.field))
+            addView(field("stroke width", penWidthRow.field))
 
             addView(sectionHeader("permissions", "check") { checkPermissions() })
             addView(field("books on this device", libraryField))
@@ -252,15 +274,56 @@ class SettingsActivity : Activity() {
      * and, when it's on, actually opens a book rather than trusting the
      * switch alone — the same check the onboarding permission step runs, see
      * [checkBookAccess].
+     *
+     * All-files access alone was found not to be enough on at least one
+     * Android 11 device: the switch reads as on, yet every book still throws
+     * a permission denial until READ_EXTERNAL_STORAGE and
+     * WRITE_EXTERNAL_STORAGE are both also granted — see
+     * `AndroidManifest.xml`'s note on the same permissions. [Unreadable] with
+     * a reader still missing either one asks for both here, on the spot,
+     * rather than leaving the writer stuck reading "opening a book failed"
+     * with nothing left on the page to tap.
      */
     private fun checkPermissions() {
         refreshPermissionsRow()
-        val message = when (val result = checkBookAccess(contentResolver)) {
+        val result = checkBookAccess(contentResolver)
+        // Asked at most once per tap: a permanently denied permission hands
+        // this callback an immediate, silent refusal with no dialog shown, so
+        // asking again on every retry would spin without the writer ever
+        // seeing why.
+        if (result is BookAccessCheck.Unreadable && !hasLegacyStoragePermissions() && !askedForStoragePermissions) {
+            askedForStoragePermissions = true
+            ActivityCompat.requestPermissions(this, LEGACY_STORAGE_PERMISSIONS, REQUEST_STORAGE_PERMISSIONS)
+            return
+        }
+        val message = when (result) {
             BookAccessCheck.PermissionMissing -> "not granted — tap the row above to allow it"
             BookAccessCheck.LibraryEmpty -> "granted, but there's no book on the shelf to try reading"
             BookAccessCheck.Readable -> "granted, and a book opened and read back fine"
             is BookAccessCheck.Unreadable -> "granted, but opening a book failed" +
                 (result.reason?.let { ": $it" } ?: "")
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun hasLegacyStoragePermissions(): Boolean = LEGACY_STORAGE_PERMISSIONS.all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /**
+     * The FUSE layer that serves `/storage/emulated/0` resolves an app's
+     * access group once, at process start — granting these two permissions
+     * mid-session does not change what the already-running process can read,
+     * only what the next one can. There is nothing to re-check here, only
+     * something to tell the writer.
+     */
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_STORAGE_PERMISSIONS) return
+        val message = if (hasLegacyStoragePermissions()) {
+            "Granted — close the diary completely and reopen it for reading to start working."
+        } else {
+            "Reading whole books still needs that permission; without it only titles, progress and notes work."
         }
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
@@ -305,37 +368,56 @@ class SettingsActivity : Activity() {
         finish()
     }
 
-    /** The three base-url choices: the two named servers, then "other" typed by hand. */
+    /**
+     * The named servers, same shape as [pickModelFrom]: a single-choice list
+     * for the two well-known ones, plus a neutral "type it in…" button that
+     * opens [promptCustomBaseUrl] for anything else.
+     */
     private fun pickBaseUrl() {
-        val labels = (
-            PROVIDERS.map { it.label + "\n" + it.baseUrl } +
-                "other\nany OpenAI-compatible server"
-            ).toTypedArray()
-        val checked = PROVIDERS.indexOf(chosenProvider).takeIf { it >= 0 } ?: PROVIDERS.size
+        val labels = PROVIDERS.map { it.label + "\n" + it.baseUrl }.toTypedArray()
+        val checked = PROVIDERS.indexOf(chosenProvider)
         AlertDialog.Builder(this)
             .setTitle("base url")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
-                chosenProvider = PROVIDERS.getOrNull(which)
+                chosenProvider = PROVIDERS[which]
                 showBaseUrl()
-                if (chosenProvider == null) baseUrlField.requestFocus()
                 dialog.dismiss()
+            }
+            .setNeutralButton("type it in…") { _, _ -> promptCustomBaseUrl() }
+            .show()
+    }
+
+    /** Puts [chosenProvider] on the form, or [customBaseUrl] when it's a hand-typed one. */
+    private fun showBaseUrl() {
+        baseUrlChooser.text = chosenProvider?.label ?: customBaseUrl
+    }
+
+    /**
+     * The escape hatch the list can't offer: a base url typed by hand, same
+     * pattern as [promptCustomModel]. Prefilled with [customBaseUrl] so
+     * re-opening this to tweak one character doesn't require retyping the
+     * whole thing; an empty submission is treated as "changed my mind" and
+     * leaves the form untouched.
+     */
+    private fun promptCustomBaseUrl() {
+        val input = valueField(customBaseUrl, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        AlertDialog.Builder(this)
+            .setTitle("base url")
+            .setView(input)
+            .setNegativeButton("cancel", null)
+            .setPositiveButton("use") { _, _ ->
+                val url = input.text.toString().trim()
+                if (url.isNotEmpty()) {
+                    chosenProvider = null
+                    customBaseUrl = url
+                    showBaseUrl()
+                }
             }
             .show()
     }
 
-    /** Puts [chosenProvider] on the form: its name on the chooser, and the typed-url row only for "other". */
-    private fun showBaseUrl() {
-        baseUrlChooser.text = chosenProvider?.label ?: "other"
-        customBaseUrlRow.visibility = if (chosenProvider == null) View.VISIBLE else View.GONE
-    }
-
-    /**
-     * The base url the settings on this form add up to. [baseUrlField] keeps
-     * whatever was last typed even while a named provider is selected, so a
-     * writer flipping to "other" and back loses nothing — but only the choice
-     * on display counts.
-     */
-    private fun effectiveBaseUrl(): String = chosenProvider?.baseUrl ?: baseUrlField.text.toString()
+    /** The base url the settings on this form add up to. */
+    private fun effectiveBaseUrl(): String = chosenProvider?.baseUrl ?: customBaseUrl
 
     /**
      * Asks the configured server which models it actually serves — the base
@@ -426,7 +508,7 @@ class SettingsActivity : Activity() {
      */
     private fun resetConnectionDefaults() {
         chosenProvider = providerFor(defaults.baseUrl)
-        baseUrlField.setText(defaults.baseUrl)
+        customBaseUrl = defaults.baseUrl
         showBaseUrl()
         choose(defaults.model)
     }
@@ -481,6 +563,9 @@ class SettingsActivity : Activity() {
         private const val EXTRA_DEFAULT_BASE_URL = "com.riddleboox.app.settings.DEFAULT_BASE_URL"
         private const val EXTRA_DEFAULT_API_KEY = "com.riddleboox.app.settings.DEFAULT_API_KEY"
         private const val EXTRA_DEFAULT_MODEL = "com.riddleboox.app.settings.DEFAULT_MODEL"
+        private const val REQUEST_STORAGE_PERMISSIONS = 1
+        private val LEGACY_STORAGE_PERMISSIONS =
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
         /**
          * Opens the screen with the build-time values as its factory defaults:
          * what a field falls back to when it has never been saved, or when the

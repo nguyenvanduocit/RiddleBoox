@@ -81,6 +81,31 @@ class EpubTest {
         }
     }
 
+    /** The query is a regex, and its Vietnamese literals are tone-blind like everything else. */
+    @Test
+    fun `a regex with tones and metacharacters finds the passage`() {
+        book().use {
+            val found = it.passages("""mèo\s+con""", limit = 5)
+            assertTrue(found.isNotEmpty())
+            assertTrue(found.all { p -> p.text.contains("mèo", ignoreCase = true) })
+        }
+    }
+
+    /** ASCII passes through [foldPattern] untouched — folding `\W` to `\w` would invert it. */
+    @Test
+    fun `folding a pattern flattens its Vietnamese and leaves its metacharacters alone`() {
+        assertEquals("""meo\s+con""", foldPattern("""mèo\s+con"""))
+        assertEquals("""\W[A-Z]+""", foldPattern("""\W[A-Z]+"""))
+    }
+
+    @Test
+    fun `a broken regex says so instead of finding nothing`() {
+        book().use {
+            val error = runCatching { it.passages("(unclosed", limit = 5) }.exceptionOrNull()
+            assertTrue(error is java.util.regex.PatternSyntaxException)
+        }
+    }
+
     @Test
     fun `something that is not a book is not opened`() {
         val notAnEpub = folder.newFile("notes.pdf").apply { writeText("%PDF-1.4 not a zip") }

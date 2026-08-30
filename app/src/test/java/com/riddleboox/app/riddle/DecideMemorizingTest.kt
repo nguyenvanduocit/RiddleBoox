@@ -98,26 +98,13 @@ class DecideMemorizingTest {
         assertTrue(decision.effects.filterIsInstance<Effect.Render>().isEmpty())
     }
 
-    @Test
-    fun `patience running out abandons the request and hands the page back`() {
-        val before = memorizing(startedAtMs = 0)
-        val decision = decideMemorizing(before, now = REPLY_PATIENCE_MS, event = null)!!
-
-        assertEquals(
-            "the request is dropped first, or its late line lands on a reopened page",
-            Effect.AbandonRequest,
-            decision.effects.first(),
-        )
-        val listening = decision.state as RiddleState.Listening
-        assertSame(before.standingReply, listening.standingReply)
-    }
-
     // ---- the waiting itself ----
 
+    /** A memory pass has no clock of its own — see [decideThinking]'s doc for why. */
     @Test
     fun `waiting with no news changes nothing, however long it waits`() {
         assertNull(decideMemorizing(memorizing(), now = 600, event = null))
-        assertNull(decideMemorizing(memorizing(), now = REPLY_PATIENCE_MS - 1, event = null))
+        assertNull(decideMemorizing(memorizing(), now = 1_000L * 60 * 60 * 24, event = null))
     }
 
     /** A memory pass streams no deltas; one here is stale news from an abandoned turn. */
@@ -132,10 +119,9 @@ class DecideMemorizingTest {
         val decisions = listOfNotNull(
             decideMemorizing(memorizing(), now = 400, event = ReplyEvent.Complete("Đã ghi nhớ.", "")),
             decideMemorizing(memorizing(), now = 400, event = ReplyEvent.Error("boom")),
-            decideMemorizing(memorizing(), now = REPLY_PATIENCE_MS, event = null),
         )
 
-        assertEquals(3, decisions.size)
+        assertEquals(2, decisions.size)
         decisions.forEach { decision ->
             assertTrue(decision.effects.none { it is Effect.RecordTurn })
         }

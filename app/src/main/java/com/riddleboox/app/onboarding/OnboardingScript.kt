@@ -11,7 +11,7 @@ val ONBOARDING_SEGMENTS: List<String> = listOf(
         "You write on me with your pen, and I write back in a hand of my own.",
     "Rest your pen a moment and I will take it that you are done, and answer. " +
         "To hand me the page yourself, touch the word 'send' at the top.",
-    "Touch 'new page' when you want to speak of something else — " +
+    "Touch 'new conversation' when you want to speak of something else — " +
         "I will not weigh the new against the old, though I still remember it.",
     "Every conversation is kept. Touch 'history' to find and reopen " +
         "any page you have ever written.",

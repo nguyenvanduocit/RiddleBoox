@@ -33,7 +33,6 @@ class ExcusesTest {
     @Test
     fun `each other failure keeps its own line`() {
         val excuses = listOf(
-            excuseFor("no key"),
             excuseFor("blank page"),
             excuseFor(dnsFailure),
             excuseFor("timed out"),

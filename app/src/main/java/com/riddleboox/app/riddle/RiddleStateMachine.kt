@@ -25,6 +25,7 @@ import com.riddleboox.app.reply.replyClient
 import com.riddleboox.app.reply.replyModel
 import com.riddleboox.app.reply.svgOpenAt
 import com.riddleboox.app.reply.writableCut
+import com.riddleboox.app.settings.PenStyle
 import com.riddleboox.app.settings.ReplySettings
 import com.riddleboox.app.settings.SendMode
 import com.riddleboox.app.tools.memorizeInstruction
@@ -84,6 +85,10 @@ class RiddleStateMachine(
     private val handwritingPlanner: HandwritingPlanner,
     /** The writer's chosen glyph height for the diary's own hand — see [com.riddleboox.app.settings.ReplyFontSize]. */
     private val replyFontSizePx: Float = HandwritingPlanner.DEFAULT_FONT_SIZE_PX,
+    /** The writer's chosen pen for their own ink — see [PenStyle]. Only affects the page sent to the diary; the screen reads it straight from [com.riddleboox.app.ui.RegionView.penStyle]. */
+    private val penStyle: PenStyle = PenStyle.Default,
+    /** The writer's separate stroke-width setting — see [com.riddleboox.app.settings.PenStrokeWidth]. */
+    private val penWidthScale: Float = 1f,
     private val conversationStore: ConversationStore,
     /** Where the pages actually sent are kept for the writer to look at. */
     private val pageArchive: PageArchive?,
@@ -149,7 +154,7 @@ class RiddleStateMachine(
 
     /**
      * The diary's running conversation — null when no key is configured, which
-     * is how [commitStrokes] knows to write its own excuse instead of asking.
+     * is how [commitStrokes] knows to write a [missingKeyLine] instead of asking.
      * One instance for the life of the machine, so it accumulates the evening's
      * exchanges rather than meeting the writer anew on every page.
      */
@@ -257,6 +262,13 @@ class RiddleStateMachine(
     private var lastGreeting: String? = null
 
     /**
+     * The unanswerable-page line last written, so [missingKeyLine] can avoid
+     * repeating it. A writer with no key configured sees one of these on every
+     * page, which is exactly the run where a repeat is noticed.
+     */
+    private var lastMissingKeyLine: String? = null
+
+    /**
      * Volatile because [onPenDown] and [onPenUp] read it from the Onyx SDK's
      * own reading thread (see
      * `references/boox-riddle-diary/.../DiaryController.kt:135`) while [tick]
@@ -297,9 +309,9 @@ class RiddleStateMachine(
         ticker.stop()
         // The tick is what turns a request into ink, so a request outliving it
         // has nowhere to land. Abandoning it silently would leave the page
-        // pulsing its blot on the way back until REPLY_PATIENCE_MS ran out;
-        // the failure is left in the queue instead, so the first tick after
-        // [start] retries the turn or says so.
+        // waiting on a reply that will never arrive; the failure is left in
+        // the queue instead, so the first tick after [start] retries the turn
+        // or says so.
         val wasInFlight = replyJob?.isActive == true
         abandonReply()
         if (wasInFlight) replyEvents.add(ReplyEvent.Error("interrupted"))
@@ -442,7 +454,7 @@ class RiddleStateMachine(
      *
      * Silent when there is ink on the page: the pass ends by blanking the
      * page for that line, and ink not yet handed over must never be blanked
-     * out from under the writer — send it or turn to a new page first. Silent
+     * out from under the writer — send it or start a new conversation first. Silent
      * too while a turn is in flight, same as every other chrome action.
      *
      * @return what happened, so a debug caller with no eyes on the page (see
@@ -456,11 +468,11 @@ class RiddleStateMachine(
         val now = ticker.nowMs()
         val diary = conversation
         if (diary == null) {
-            // No voice to tend the memory: the same excuse an unanswerable
+            // No voice to tend the memory: the same line an unanswerable
             // page gets, written in place of the standing reply.
             inkCapture.setInputEnabled(false)
             panel.render(PageRenderState.EMPTY)
-            state = writeWholeReply(excuseFor("no key"), now, startYPx = REPLY_TOP_PX)
+            state = writeWholeReply(nextMissingKeyLine(), now, startYPx = REPLY_TOP_PX)
             onStatusChanged("Replying (no LLM key configured)")
             return "accepted: no key configured"
         }
@@ -502,7 +514,7 @@ class RiddleStateMachine(
      * What it means depends on how far the turn got, and that decision is
      * [stopActionFor] rather than a `when` here. Waiting: the request is
      * dropped and the page comes back blank, which is the same clean page
-     * "new page" gives. Writing: the pen stops where it stands and what it
+     * "new conversation" gives. Writing: the pen stops where it stands and what it
      * has written stays, because the writer has already read it.
      */
     fun stopNow() {
@@ -579,6 +591,13 @@ class RiddleStateMachine(
         onStatusChanged("…")
     }
 
+    /**
+     * The line written in place of a reply when there is no key to ask with,
+     * never the same as the one before it.
+     */
+    private fun nextMissingKeyLine(): String =
+        missingKeyLine(previous = lastMissingKeyLine).also { lastMissingKeyLine = it }
+
     private fun commitPage(standingReply: WritePlan?, now: Long) {
         val committed = strokeStore.strokes.map { InkStroke(it.points.toMutableList()) }
         strokeStore.clear()
@@ -598,12 +617,18 @@ class RiddleStateMachine(
      */
     fun commitDemoText(text: String) {
         val s = state as? RiddleState.Listening ?: return
+        val existingReply = s.standingReply?.strokes ?: emptyList()
+        val startYPx = if (existingReply.isEmpty()) {
+            DEMO_TEXT_TOP_PX
+        } else {
+            replyWriteStartBelow(existingReply, panel.drawingRect().height, replyLineHeightPx)
+        }
         val plan = handwritingPlanner.plan(
             text = text,
             pageWidthPx = pageWidthPx(),
             fontSizePx = replyFontSizePx,
             lineHeightPx = replyLineHeightPx,
-            startYPx = DEMO_TEXT_TOP_PX,
+            startYPx = startYPx,
         )
         val committed = plan.strokes.map { stroke ->
             InkStroke(stroke.points.map { InkPoint(it.x, it.y, DEMO_PRESSURE) }.toMutableList())
@@ -686,12 +711,12 @@ class RiddleStateMachine(
 
         if (conversation == null) {
             // No spirit to answer: skip the ink-drinking ritual and write the
-            // excuse straight away, laid out below where the writing was
+            // missing-key line straight away, laid out below where the writing was
             // (main.rs:432-437). Like `beginReplying`, the page blanks first —
             // a reply is always revealed onto a clear page.
             panel.render(PageRenderState.EMPTY)
             state = writeWholeReply(
-                text = excuseFor("no key"),
+                text = nextMissingKeyLine(),
                 now = now,
                 startYPx = replyStartBelow(committed, panel.drawingRect().height, lineHeightPx = replyLineHeightPx),
             )
@@ -728,7 +753,7 @@ class RiddleStateMachine(
         // cannot post into the one the next turn reads.
         val events = replyEvents
         replyJob = replyScope.launch {
-            val png = PageRasterizer.rasterize(strokes)
+            val png = PageRasterizer.rasterize(strokes, style = penStyle, widthScale = penWidthScale)
             if (png == null) {
                 events.add(ReplyEvent.Error("blank page"))
                 return@launch
@@ -797,7 +822,7 @@ class RiddleStateMachine(
      */
     private fun startReplying(now: Long, startYPx: Float): RiddleState.Replying {
         beginReply(startYPx)
-        return RiddleState.Replying(nextTickAtMs = now, lastArrivalAtMs = now)
+        return RiddleState.Replying(nextTickAtMs = now)
     }
 
     /** [Effect.BeginReply]: the writing apparatus, with no state of its own. */
@@ -949,7 +974,7 @@ class RiddleStateMachine(
     private fun tickReplying(s: RiddleState.Replying, now: Long) {
         // Words are taken in on every tick, not only on the slower drawing
         // one: text that arrived is text the pen can be laying out already.
-        var next = if (s.streamEnded) s else takeArrivingWords(s, now)
+        var next = if (s.streamEnded) s else takeArrivingWords(s)
         if (now < next.nextTickAtMs) {
             state = next
             return
@@ -1020,42 +1045,25 @@ class RiddleStateMachine(
      * the writer has already read, and no writing an excuse for a diary that
      * plainly did answer.
      */
-    private fun takeArrivingWords(s: RiddleState.Replying, now: Long): RiddleState.Replying {
-        var next = s
+    private fun takeArrivingWords(s: RiddleState.Replying): RiddleState.Replying {
         while (true) {
             when (val event = replyEvents.poll()) {
-                is ReplyEvent.Delta -> {
-                    feedReply(event.text)
-                    next = next.copy(lastArrivalAtMs = now)
-                }
-                // A lookup after the pen has started: nothing to write, but it
-                // is the stream saying it is still alive, which is exactly what
-                // the patience clock here measures.
-                is ReplyEvent.Lookup -> {
-                    Log.i(TAG, "looking up mid-reply: ${event.tool}")
-                    next = next.copy(lastArrivalAtMs = now)
-                }
+                is ReplyEvent.Delta -> feedReply(event.text)
+                // A lookup after the pen has started: nothing to write, just
+                // the model reaching for a tool mid-reply.
+                is ReplyEvent.Lookup -> Log.i(TAG, "looking up mid-reply: ${event.tool}")
                 is ReplyEvent.Complete -> {
                     flushPendingText()
                     persistTurn(event.transcript, plainText(event.text))
-                    return next.copy(streamEnded = true)
+                    return s.copy(streamEnded = true)
                 }
                 is ReplyEvent.Error -> {
                     Log.w(TAG, "reply cut short mid-writing: ${event.message}")
                     flushPendingText()
                     persistCutShortTurn()
-                    return next.copy(streamEnded = true)
+                    return s.copy(streamEnded = true)
                 }
-                null -> {
-                    // A stream that stops arriving would otherwise leave the
-                    // blot pulsing forever.
-                    if (now - next.lastArrivalAtMs < REPLY_PATIENCE_MS) return next
-                    Log.w(TAG, "reply stalled mid-writing, giving up")
-                    replyJob?.cancel()
-                    flushPendingText()
-                    persistCutShortTurn()
-                    return next.copy(streamEnded = true)
-                }
+                null -> return s
             }
         }
     }
@@ -1176,7 +1184,7 @@ class RiddleStateMachine(
     }
 
     /**
-     * Turn to a new page: the conversation being had is left where it stands in
+     * Start a new conversation: the one being had is left where it stands in
      * the history, and a new one begins.
      *
      * Nothing is lost by it — every turn was written to disk as it was answered
@@ -1184,7 +1192,7 @@ class RiddleStateMachine(
      * rather than answering the next line as though it knew the writer. The
      * greeting comes back, because this is a first page again.
      */
-    fun newPage() {
+    fun newConversation() {
         clearPage()
         conversation?.reset()
         conversationId = newConversationId()
@@ -1259,7 +1267,14 @@ class RiddleStateMachine(
 
         private const val TICK_MS = 16L
 
-        /** Where [commitDemoText]'s synthetic "user" writing starts — near the page top, like a real first line. */
+        /**
+         * Where [commitDemoText]'s synthetic "user" writing starts on a blank
+         * page — near the page top, like a real first line. Once a standing
+         * reply already occupies the page, [commitDemoText] instead starts
+         * below it via [replyWriteStartBelow], the same as a real pen would;
+         * writing at this fixed position regardless used to land the demo
+         * text directly on top of the diary's own last answer.
+         */
         private const val DEMO_TEXT_TOP_PX = 120f
 
         /** Mid-weight, uniform pressure — a demo pen never presses harder or softer. */

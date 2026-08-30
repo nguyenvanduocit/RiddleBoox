@@ -54,31 +54,19 @@ class Epub private constructor(
     }
 
     /**
-     * Every place [query] occurs in the book, as the sentence-or-so around it,
-     * up to [limit] of them.
+     * Every place the regular expression [query] matches in the book, as the
+     * sentence-or-so around it, up to [limit] of them.
      *
-     * The search is diacritic-blind ([Folded]) but the passage handed back is
-     * cut out of the original text, tones and capitals intact — the writer
-     * asked in whatever they could spell, and should be quoted the book.
+     * The pattern runs against the folded text ([Folded]) with case ignored,
+     * so `co ma thap gia` and `Cổ Ma Tháp Già` find the same passages — the
+     * writer's words reach the model through handwriting and come back with
+     * whatever tones the model read. The passage handed back is cut out of
+     * the original, tones and capitals intact. A malformed pattern is a
+     * [java.util.regex.PatternSyntaxException] out of this call, not an empty
+     * result, so the caller can say which part of it does not parse.
      */
-    fun passages(query: String, limit: Int, window: Int = PASSAGE_CHARS): List<Passage> {
-        val wanted = fold(query.trim())
-        if (wanted.isEmpty()) return emptyList()
-        val found = ArrayList<Passage>()
-        for ((index, chapter) in chapters.withIndex()) {
-            if (found.size >= limit) break
-            val text = text(index)
-            val folded = Folded(text)
-            var at = folded.value.indexOf(wanted)
-            while (at >= 0 && found.size < limit) {
-                val start = folded.sourceIndex(at)
-                val end = folded.sourceIndex(at + wanted.length)
-                found.add(Passage(index, chapter.title, excerpt(text, start, end, window)))
-                at = folded.value.indexOf(wanted, at + wanted.length)
-            }
-        }
-        return found
-    }
+    fun passages(query: String, limit: Int, window: Int = PASSAGE_CHARS): List<Passage> =
+        searchPassages(chapters, ::text, query, limit, window)
 
     override fun close() {
         runCatching { zip.close() }
@@ -334,6 +322,56 @@ private fun decodeEntities(text: String): String = ENTITY.replace(text) { match 
         body.startsWith("#") ->
             body.drop(1).toIntOrNull()?.let { String(Character.toChars(it)) } ?: match.value
         else -> ENTITIES[body.lowercase()] ?: match.value
+    }
+}
+
+/**
+ * The search loop behind [Epub.passages], over any source of chapter text —
+ * the zip itself, or [CachedEpub]'s extracted copies. One copy of the logic,
+ * so the cached path cannot drift from the live one.
+ *
+ * [query] is a regular expression run against each chapter's folded text.
+ * The pattern itself is folded first ([foldPattern]) so Vietnamese literals
+ * inside it lose their tones the same way the text did, while ASCII — every
+ * metacharacter, class and quantifier — passes through untouched.
+ */
+internal fun searchPassages(
+    chapters: List<Chapter>,
+    text: (Int) -> String,
+    query: String,
+    limit: Int,
+    window: Int,
+): List<Passage> {
+    if (query.isBlank()) return emptyList()
+    val wanted = Regex(foldPattern(query.trim()), RegexOption.IGNORE_CASE)
+    val found = ArrayList<Passage>()
+    for ((index, chapter) in chapters.withIndex()) {
+        if (found.size >= limit) break
+        val body = text(index)
+        // The cheap flat fold answers "does it match this chapter at all";
+        // the full [Folded], with its index map back to the original, is only
+        // built for the chapters that say yes — most say no.
+        if (!wanted.containsMatchIn(fold(body))) continue
+        val folded = Folded(body)
+        for (match in wanted.findAll(folded.value)) {
+            if (found.size >= limit) break
+            val start = folded.sourceIndex(match.range.first)
+            val end = folded.sourceIndex(match.range.last + 1)
+            found.add(Passage(index, chapter.title, excerpt(body, start, end, window)))
+        }
+    }
+    return found
+}
+
+/**
+ * [pattern] with its Vietnamese literals folded to match folded text, and its
+ * ASCII — including every regex metacharacter and escape — left exactly as
+ * written. Folding `\W` to `\w` would invert its meaning; folding `ề` to `e`
+ * is the whole point.
+ */
+internal fun foldPattern(pattern: String): String = buildString(pattern.length) {
+    for (c in pattern) {
+        if (c.code < 128) append(c) else append(Folded.foldChar(c))
     }
 }
 

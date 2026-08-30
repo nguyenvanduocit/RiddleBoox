@@ -135,13 +135,13 @@ fun idleStatus(mode: SendMode): String = when (mode) {
 internal const val PULSE_MS = 600L
 
 /**
- * How long the diary is given to answer before the page gives up on it.
- *
- * Measured from the moment the page was handed over, and deliberately *not*
- * extended by a lookup: a turn that spends two minutes reading the writer's
- * library is a turn the writer has stopped waiting for.
+ * A turn runs until an answer, a network-level timeout
+ * ([com.riddleboox.app.reply.replyClient]'s HTTP client), or [REPLY_RETRY_LIMIT]
+ * is reached — never on a clock of its own. A search through a large book is
+ * progress, not a stall, and is free to take as long as the book is big;
+ * [RiddleStateMachine.stopNow] is the way out of a request that never
+ * returns.
  */
-internal const val REPLY_PATIENCE_MS = 120_000L
 
 /** How many times a failure that is not the network gets tried again. */
 internal const val REPLY_RETRY_LIMIT = 3
@@ -158,8 +158,9 @@ internal const val REPLY_RETRY_DELAY_MS = 6_000L
 
 /**
  * Ceiling on [rateLimitRetryDelayMs] — a burst of 429s backs off past the
- * flat [REPLY_RETRY_DELAY_MS], but must still leave room for a few attempts
- * inside [REPLY_PATIENCE_MS] rather than spending the whole budget on one wait.
+ * flat [REPLY_RETRY_DELAY_MS], capped so [REPLY_RETRY_LIMIT] attempts still
+ * clear in a reasonable span rather than one wait swallowing the whole retry
+ * budget.
  */
 internal const val REPLY_RATE_LIMIT_MAX_DELAY_MS = 30_000L
 
@@ -244,7 +245,7 @@ fun decideThinking(
         // The first words are in: the page clears and the pen starts, with the
         // rest of the reply still on its way.
         is ReplyEvent.Delta -> return Decision(
-            state = RiddleState.Replying(nextTickAtMs = now, lastArrivalAtMs = now),
+            state = RiddleState.Replying(nextTickAtMs = now),
             effects = listOf(
                 Effect.BeginReply(REPLY_TOP_PX),
                 Effect.FeedReply(event.text),
@@ -260,7 +261,6 @@ fun decideThinking(
             return Decision(
                 state = RiddleState.Replying(
                     nextTickAtMs = now,
-                    lastArrivalAtMs = now,
                     streamEnded = true,
                 ),
                 effects = listOf(
@@ -274,8 +274,8 @@ fun decideThinking(
         }
 
         // Still thinking, and now with a reason to say so. Only the caption
-        // changes; the state is handed back untouched so that neither the retry
-        // count nor the patience clock is reset by it.
+        // changes; the state is handed back untouched so the retry count is
+        // not reset by it.
         is ReplyEvent.Lookup -> return Decision(
             state = s,
             effects = listOf(
@@ -287,11 +287,6 @@ fun decideThinking(
         is ReplyEvent.Error -> return decideError(s, now, event, page)
 
         null -> Unit
-    }
-
-    if (now - s.startedAtMs >= REPLY_PATIENCE_MS) {
-        val giveUp = excuse("timed out", now, page)
-        return giveUp.copy(effects = listOf(Effect.AbandonRequest) + giveUp.effects)
     }
 
     // Nothing has happened and nothing is due: the page is already blank and
@@ -333,7 +328,7 @@ fun decideMemorizing(
             // refresh the writer is watching for the first word.
             val standing = writeBounds(s.standingReply?.strokes ?: emptyList())
             return Decision(
-                state = RiddleState.Replying(nextTickAtMs = now, lastArrivalAtMs = now, streamEnded = true),
+                state = RiddleState.Replying(nextTickAtMs = now, streamEnded = true),
                 effects = listOfNotNull(
                     standing?.let { Effect.Render(PageRenderState.EMPTY) },
                     standing?.let { Effect.Refresh(it, RefreshMode.Quality) },
@@ -367,16 +362,9 @@ fun decideMemorizing(
 
         null -> Unit
     }
-    if (now - s.startedAtMs < REPLY_PATIENCE_MS) return null
-    return Decision(
-        state = RiddleState.Listening(standingReply = s.standingReply),
-        effects = listOf(
-            Effect.AbandonRequest,
-            Effect.Note("memory pass timed out", warning = true),
-            Effect.PenInput(true),
-            Effect.Status("Could not commit to memory — tap memorize to try again"),
-        ),
-    )
+    // Nothing has happened and nothing is due: a memory pass has no clock of
+    // its own — see [decideThinking]'s doc for why.
+    return null
 }
 
 /**
@@ -425,7 +413,7 @@ private fun decideError(
  * that never really happened.
  */
 private fun excuse(reason: String, now: Long, page: PageRect) = Decision(
-    state = RiddleState.Replying(nextTickAtMs = now, lastArrivalAtMs = now, streamEnded = true),
+    state = RiddleState.Replying(nextTickAtMs = now, streamEnded = true),
     effects = listOf(
         Effect.BeginReply(REPLY_TOP_PX),
         Effect.WriteText(excuseFor(reason)),

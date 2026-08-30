@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.Log
+import com.riddleboox.app.settings.PenStyle
 import java.io.ByteArrayOutputStream
 
 /**
@@ -25,8 +26,10 @@ object PageRasterizer {
         strokes: List<InkStroke>,
         maxLongEdgePx: Int = 800,
         marginPx: Int = 20,
+        style: PenStyle = PenStyle.Default,
+        widthScale: Float = 1f,
     ): ByteArray? {
-        val plan = PageRasterizerMath.plan(strokes, maxLongEdgePx, marginPx) ?: return null
+        val plan = PageRasterizerMath.plan(strokes, maxLongEdgePx, marginPx, style, widthScale) ?: return null
 
         val bitmap = Bitmap.createBitmap(plan.outWidthPx, plan.outHeightPx, Bitmap.Config.ARGB_8888)
         try {
@@ -37,7 +40,7 @@ object PageRasterizer {
             // rendering full size and box-filtering afterwards.
             canvas.scale(plan.scale, plan.scale)
             canvas.translate(-plan.cropLeft, -plan.cropTop)
-            paintInk(canvas, strokes)
+            paintInk(canvas, strokes, style, widthScale)
 
             // Every channel carries the same value, so the encoder emits a grayscale
             // -valued opaque PNG; dropping alpha keeps it at 3 bytes per pixel.
@@ -62,20 +65,22 @@ object PageRasterizer {
 
     private const val TAG = "PageRasterizer"
 
-    private fun paintInk(canvas: Canvas, strokes: List<InkStroke>) {
+    private fun paintInk(canvas: Canvas, strokes: List<InkStroke>, style: PenStyle, widthScale: Float) {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.BLACK
+            alpha = style.alpha
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
         for (stroke in strokes) {
             val points = stroke.points
+            val pointCount = points.size
             when {
                 points.isEmpty() -> continue
                 points.size == 1 -> {
                     val p = points[0]
                     paint.style = Paint.Style.FILL
-                    canvas.drawCircle(p.x, p.y, inkRadiusPx(p.pressure), paint)
+                    canvas.drawCircle(p.x, p.y, inkRadiusPx(p.pressure, 0, pointCount, style, widthScale), paint)
                 }
                 else -> {
                     paint.style = Paint.Style.STROKE
@@ -84,7 +89,8 @@ object PageRasterizer {
                         val b = points[i]
                         // Mean radius of the two ends, as a diameter: the segment
                         // tapers with pen pressure the way the nib does.
-                        paint.strokeWidth = inkRadiusPx(a.pressure) + inkRadiusPx(b.pressure)
+                        paint.strokeWidth = inkRadiusPx(a.pressure, i - 1, pointCount, style, widthScale) +
+                            inkRadiusPx(b.pressure, i, pointCount, style, widthScale)
                         canvas.drawLine(a.x, a.y, b.x, b.y, paint)
                     }
                 }

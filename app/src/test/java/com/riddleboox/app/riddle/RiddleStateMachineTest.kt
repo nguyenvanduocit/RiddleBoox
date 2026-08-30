@@ -3,7 +3,9 @@ package com.riddleboox.app.riddle
 import com.riddleboox.app.agent.AgentDefinition
 import com.riddleboox.app.agent.AgentManifest
 import com.riddleboox.app.handwriting.FakeRaster
+import com.riddleboox.app.handwriting.GlyphMask
 import com.riddleboox.app.handwriting.HandwritingPlanner
+import com.riddleboox.app.handwriting.TextRaster
 import com.riddleboox.app.handwriting.WriteStroke
 import com.riddleboox.app.history.ConversationStore
 import com.riddleboox.app.ink.StrokeStore
@@ -11,6 +13,7 @@ import com.riddleboox.app.reply.FakeChatServer
 import com.riddleboox.app.settings.ReplySettings
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,15 +36,21 @@ class RiddleStateMachineTest {
 
     private val harnesses = mutableListOf<Harness>()
 
-    private fun harness(replySettings: ReplySettings? = null): Harness =
-        Harness(replySettings).also { harnesses.add(it) }
+    private fun harness(
+        replySettings: ReplySettings? = null,
+        raster: TextRaster = FakeRaster(),
+    ): Harness = Harness(replySettings, raster = raster).also { harnesses.add(it) }
 
     @After
     fun cleanup() {
         harnesses.forEach { it.root.deleteRecursively() }
     }
 
-    private class Harness(replySettings: ReplySettings? = null, pageWidthPx: Int = 400) {
+    private class Harness(
+        replySettings: ReplySettings? = null,
+        pageWidthPx: Int = 400,
+        raster: TextRaster = FakeRaster(),
+    ) {
         val root: File = File.createTempFile("riddle-state-machine-test", "").apply { delete(); mkdirs() }
         val ticker = FakeTicker()
         val panel = FakePagePanel()
@@ -63,7 +72,7 @@ class RiddleStateMachineTest {
                 workspace = File(root, "workspace").apply { mkdirs() },
             ),
             replySettings = replySettings,
-            handwritingPlanner = HandwritingPlanner(FakeRaster()),
+            handwritingPlanner = HandwritingPlanner(raster),
             conversationStore = conversationStore,
             pageArchive = null,
             pendingTurnMarker = pendingTurnMarker,
@@ -119,7 +128,41 @@ class RiddleStateMachineTest {
     }
 
     @Test
-    fun `writing without a configured key answers with an excuse and records nothing`() {
+    fun `a demo write lands below the standing reply instead of overlapping it`() {
+        FakeChatServer(
+            FakeChatServer.turn(
+                transcript = "kể chuyện dài",
+                reply = "aaaaaaaaaa bbbbbbbbbb cccccccccc dddddddddd eeeeeeeeee ffffffffff",
+            ),
+        ).use { server ->
+            val h = harness(replySettings = ReplySettings(server.baseUrl, "sk-test", "openai/gpt-5.6-luna"))
+            h.machine.start()
+            h.tick(0)
+            h.driveUntilIdle() // greeting
+
+            h.demoStrokes("kể chuyện dài")
+            h.driveUntilIdle()
+
+            val standing = h.panel.renders.last().replyStrokes
+            val standingBottom = standing.flatMap { it.points }.maxOf { it.y }
+            assertTrue(
+                "the reply must span past the demo tool's old fixed top position for this test to mean anything",
+                standingBottom > 120f,
+            )
+
+            h.demoStrokes("thêm một đoạn nữa")
+            val afterSecondDemo = h.panel.renders.last { it.userStrokes.isNotEmpty() }
+            val demoTop = afterSecondDemo.userStrokes.flatMap { it.points }.minOf { it.y }
+
+            assertTrue(
+                "the second demo write starts below the standing reply rather than overlapping it",
+                demoTop > standingBottom,
+            )
+        }
+    }
+
+    @Test
+    fun `writing without a configured key answers with a missing-key line and records nothing`() {
         val h = harness(replySettings = null)
         h.machine.start()
         h.tick(0)
@@ -131,11 +174,34 @@ class RiddleStateMachineTest {
 
         assertEquals(listOf(true, false), h.busyEvents)
         assertTrue("no key configured is never a turn", h.conversationStore.list().isEmpty())
-        assertTrue("the pen reopens once the excuse is written", h.pen.inputEnabledCalls.last())
+        assertTrue("the pen reopens once the line is written", h.pen.inputEnabledCalls.last())
     }
 
     @Test
-    fun `stopping the pen mid-excuse leaves nothing recorded and reopens the page`() {
+    fun `an unanswerable page says where the key goes, and says it differently next time`() {
+        val raster = RecordingRaster()
+        val h = harness(replySettings = null, raster = raster)
+        h.machine.start()
+        h.tick(0)
+        h.driveUntilIdle() // greeting
+
+        raster.written.clear()
+        h.demoStrokes("Hôm nay tôi buồn.")
+        h.driveUntilIdle()
+        val first = raster.text()
+
+        raster.written.clear()
+        h.demoStrokes("Và hôm qua nữa.")
+        h.driveUntilIdle()
+        val second = raster.text()
+
+        assertTrue("the first page is sent to Settings: $first", first.contains("Settings"))
+        assertTrue("the second page is sent to Settings: $second", second.contains("Settings"))
+        assertNotEquals("the same line twice reads as a stuck screen", first, second)
+    }
+
+    @Test
+    fun `stopping the pen mid-line leaves nothing recorded and reopens the page`() {
         val h = harness(replySettings = null)
         h.machine.start()
         h.tick(0)
@@ -143,7 +209,7 @@ class RiddleStateMachineTest {
 
         h.busyEvents.clear()
         h.demoStrokes("Một câu trả lời đủ dài để chưa viết xong ngay khi bút vừa chạm mực trên trang giấy này.")
-        // A couple of ticks reveal some of the excuse but not all of it —
+        // A couple of ticks reveal some of the line but not all of it —
         // long enough that stopping catches it mid-reveal rather than after
         // finishTurn already returned to Listening.
         repeat(2) { h.tick() }
@@ -151,7 +217,7 @@ class RiddleStateMachineTest {
         h.machine.stopNow()
         h.driveUntilIdle()
 
-        assertTrue("an excuse cut short is still never a turn", h.conversationStore.list().isEmpty())
+        assertTrue("a line cut short is still never a turn", h.conversationStore.list().isEmpty())
         assertEquals(listOf(true, false), h.busyEvents)
     }
 
@@ -319,7 +385,7 @@ class RiddleStateMachineTest {
     }
 
     @Test
-    fun `memorize without a configured key answers with an excuse and records nothing`() {
+    fun `memorize without a configured key answers with a missing-key line and records nothing`() {
         val h = harness(replySettings = null)
         h.machine.start()
         h.tick(0)
@@ -330,8 +396,8 @@ class RiddleStateMachineTest {
         h.driveUntilIdle()
 
         assertEquals(listOf(true, false), h.busyEvents)
-        assertTrue("an excuse is never a turn", h.conversationStore.list().isEmpty())
-        assertTrue("the pen reopens once the excuse is written", h.pen.inputEnabledCalls.last())
+        assertTrue("a missing-key line is never a turn", h.conversationStore.list().isEmpty())
+        assertTrue("the pen reopens once the line is written", h.pen.inputEnabledCalls.last())
     }
 
     @Test
@@ -373,6 +439,26 @@ private class FakeTicker : Ticker {
     fun advance(byMs: Long) {
         elapsedMs += byMs
         tickFn?.invoke()
+    }
+}
+
+/**
+ * A [TextRaster] that keeps what it was asked to draw, so a test can read the
+ * words a reply was written in — a [com.riddleboox.app.handwriting.WritePlan]
+ * is strokes by then, and strokes cannot be read back.
+ */
+private class RecordingRaster : TextRaster {
+    val written = mutableListOf<String>()
+
+    fun text(): String = written.joinToString("")
+
+    override fun measure(text: String, fontSizePx: Float): Float = text.length * 10f
+
+    override fun rasterize(text: String, fontSizePx: Float): GlyphMask {
+        written.add(text)
+        val mask = GlyphMask((text.length * 10).coerceAtLeast(1), 20)
+        for (y in 2..8) mask[5, y] = true
+        return mask
     }
 }
 

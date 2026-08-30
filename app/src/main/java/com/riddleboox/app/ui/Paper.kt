@@ -11,6 +11,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.annotation.DrawableRes
 
 /**
  * The sheet of paper every screen in this app is a page of: white edge to edge,
@@ -46,8 +47,14 @@ fun Activity.openPaperWindow() {
  * on a normal display, but e-ink's coarser grayscale dithers a faded black down
  * to something that isn't reliably legible at 16sp. The restraint comes from
  * the small size and the serif caps instead.
+ *
+ * [icon] sets a mark before the word rather than in place of it. A row of caps
+ * at one size is a wall to scan; a mark gives each label a shape the eye can be
+ * drawn to and find again without reading. The word stays because a mark alone
+ * has to be learned. What survives the panel at this size is a narrow set —
+ * solid shapes or a 2-unit stroke, nothing finer; see `ic_chrome_*.xml`.
  */
-fun Context.caption(label: String): TextView = TextView(this).apply {
+fun Context.caption(label: String, @DrawableRes icon: Int = 0): TextView = TextView(this).apply {
     text = label
     textSize = 16f
     // UI chrome is sans-serif medium for reliable glyph shapes on BOOX's
@@ -56,6 +63,23 @@ fun Context.caption(label: String): TextView = TextView(this).apply {
     letterSpacing = 0.08f
     isAllCaps = true
     setTextColor(Color.BLACK)
+    if (icon != 0) {
+        // The mark is measured off the type, not off the screen. BOOX lets the
+        // reader scale system text, and this panel ships scaled down — a mark
+        // fixed in dp comes out half again taller than the caps beside it and
+        // reads as a button stuck to a word. [TextView.getTextSize] is already
+        // px with that scale in it, and one em is the box the drawing was cut
+        // to sit inside: caps fill about 0.7 of it, the glyphs about 0.75.
+        val mark = requireNotNull(context.getDrawable(icon))
+        val em = textSize.toInt()
+        mark.setBounds(0, 0, em, em)
+        // Relative, not left/right: the mark leads the word in either
+        // direction the page is ever set in.
+        setCompoundDrawablesRelative(mark, null, null, null)
+        // Wide enough that the mark reads as its own thing and not as the
+        // word's first letter; the caps' own letterSpacing is 0.08 of an em.
+        compoundDrawablePadding = dp(6)
+    }
 }
 
 /**
@@ -124,7 +148,7 @@ fun Activity.runningHead(
     }
     return LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(48), 0, dp(48), 0)
+        setPadding(dp(32), 0, dp(32), 0)
         addView(
             row,
             LinearLayout.LayoutParams(
@@ -182,7 +206,7 @@ fun Activity.paperPage(head: View, body: View): View = LinearLayout(this).apply 
  */
 fun Activity.textBlock(): LinearLayout = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
-    setPadding(dp(48), 0, dp(48), dp(56))
+    setPadding(dp(32), 0, dp(32), dp(56))
 }
 
 fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

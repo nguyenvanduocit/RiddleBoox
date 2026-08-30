@@ -166,12 +166,41 @@ class DiaryToolsTest {
         assertTrue(onwards.contains("(characters 5000 to 10000 of "))
     }
 
+    /** Asking for more per call reads a whole long chapter in one lookup instead of an offset-loop. */
+    @Test
+    fun `max_chars reads more of a long chapter in one call`() {
+        val long = tools(fillerChars = 20_000)
+        val answer = ask("read_book", "book" to "gombrich", "chapter" to 1, "max_chars" to 15_000, tools = long)
+        assertTrue(answer.contains("(characters 0 to 15000 of "))
+    }
+
     @Test
     fun `a phrase is found without knowing its chapter`() {
         val answer = ask("search_in_book", "book" to "gombrich", "query" to "con meo")
         assertTrue(answer.startsWith("1 passages in \"Câu Chuyện Nghệ Thuật\" containing \"con meo\":"))
         assertTrue(answer.contains("chapter 2 — Chương hai"))
         assertTrue("phải trích đúng chữ trong sách", answer.contains("Con mèo lại đến"))
+    }
+
+    @Test
+    fun `the query is a regex, tone-blind on both sides`() {
+        val answer = ask("search_in_book", "book" to "gombrich", "query" to "mèo\\s+con")
+        assertTrue(answer.startsWith("1 passages in \"Câu Chuyện Nghệ Thuật\" containing"))
+        assertTrue(answer.contains("chapter 1"))
+    }
+
+    @Test
+    fun `a broken regex is explained, not silently empty`() {
+        val answer = ask("search_in_book", "book" to "gombrich", "query" to "(unclosed")
+        assertTrue(answer.startsWith("\"(unclosed\" is not a valid regular expression:"))
+    }
+
+    /** Wider context around a match means fewer calls back to read_book to see what surrounds it. */
+    @Test
+    fun `context_chars widens the passage around a match`() {
+        val narrow = ask("search_in_book", "book" to "gombrich", "query" to "mèo", "context_chars" to 5)
+        val wide = ask("search_in_book", "book" to "gombrich", "query" to "mèo", "context_chars" to 200)
+        assertTrue(wide.length > narrow.length)
     }
 
     /**

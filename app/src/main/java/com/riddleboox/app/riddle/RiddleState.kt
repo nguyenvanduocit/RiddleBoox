@@ -112,8 +112,6 @@ sealed class RiddleState {
         /** Where the waiting blot is showing, or null while the pen is writing. */
         val blotAt: WritePoint? = null,
         val nextBlotAtMs: Long = 0L,
-        /** When the last word arrived, so a stalled stream can be given up on. */
-        val lastArrivalAtMs: Long = 0L,
     ) : RiddleState()
 
 }

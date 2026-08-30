@@ -32,14 +32,39 @@ internal class Folded(private val source: String) {
         val folded = StringBuilder(source.length)
         val from = ArrayList<Int>(source.length)
         for (i in source.indices) {
-            val plain = Normalizer.normalize(source[i].lowercaseChar().toString(), Normalizer.Form.NFD)
-                .replace(COMBINING, "")
-                .replace('đ', 'd')
+            val plain = foldChar(source[i])
             repeat(plain.length) { from.add(i) }
             folded.append(plain)
         }
         value = folded.toString()
         origin = from.toIntArray()
+    }
+
+    internal companion object {
+
+        /**
+         * One fold per distinct character, ever. A book is millions of
+         * characters drawn from a few hundred distinct ones, and
+         * [Normalizer.normalize] is far too slow to call once per occurrence.
+         * The memo is a flat array over the range every Latin and Vietnamese
+         * character lives in — an array read per character, no boxing — with
+         * a map behind it for anything beyond. Racing writes are idempotent,
+         * so neither needs a lock.
+         */
+        private val TABLE = arrayOfNulls<String>(0x2000)
+        private val BEYOND = java.util.concurrent.ConcurrentHashMap<Char, String>()
+
+        fun foldChar(c: Char): String {
+            if (c.code < TABLE.size) {
+                return TABLE[c.code] ?: normalize(c).also { TABLE[c.code] = it }
+            }
+            return BEYOND.getOrPut(c) { normalize(c) }
+        }
+
+        private fun normalize(c: Char): String =
+            Normalizer.normalize(c.lowercaseChar().toString(), Normalizer.Form.NFD)
+                .replace(COMBINING, "")
+                .replace('đ', 'd')
     }
 
     /**
@@ -53,5 +78,13 @@ internal class Folded(private val source: String) {
     }
 }
 
-/** [text] flattened for matching — see [Folded]. */
-internal fun fold(text: String): String = Folded(text).value
+/**
+ * [text] flattened for matching — see [Folded] — without the map back to the
+ * original. This is the scanning form: a search folds every chapter just to
+ * ask `contains`, and pays for the index map only in the chapters that hit.
+ */
+internal fun fold(text: String): String {
+    val folded = StringBuilder(text.length)
+    for (c in text) folded.append(Folded.foldChar(c))
+    return folded.toString()
+}

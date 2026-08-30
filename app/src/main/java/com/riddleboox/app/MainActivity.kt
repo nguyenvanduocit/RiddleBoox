@@ -1,16 +1,17 @@
 package com.riddleboox.app
 
+import android.Manifest
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.Color
 import android.net.Uri
 import android.graphics.Rect
 import android.os.Bundle
 import android.os.Environment
+import android.provider.Settings
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.SurfaceHolder
@@ -21,6 +22,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -51,10 +53,13 @@ import com.riddleboox.app.onboarding.ONBOARDING_SEGMENTS
 import com.riddleboox.app.onboarding.OnboardingController
 import com.riddleboox.app.onboarding.welcomeOverlay
 import com.riddleboox.app.settings.OnboardingStore
+import com.riddleboox.app.settings.PenStrokeWidthStore
+import com.riddleboox.app.settings.PenStyleStore
 import com.riddleboox.app.settings.ReplyFontSizeStore
 import com.riddleboox.app.settings.ReplySettings
 import com.riddleboox.app.settings.SettingsActivity
 import com.riddleboox.app.library.Book
+import com.riddleboox.app.library.BookAccessCheck
 import com.riddleboox.app.library.OnyxLibrary
 import com.riddleboox.app.library.allFilesAccess
 import com.riddleboox.app.library.canOpenBooks
@@ -76,11 +81,13 @@ import com.riddleboox.app.reply.Toolbox
 import com.riddleboox.app.reply.reasoningFor
 import com.riddleboox.app.reply.replyClient
 import com.riddleboox.app.reply.replyModel
+import com.riddleboox.app.ui.OfflineWatcher
 import com.riddleboox.app.ui.RegionView
 import com.riddleboox.app.ui.RegionViewPanel
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.chromeTopInset
 import com.riddleboox.app.ui.dp
+import com.riddleboox.app.ui.offlineBanner
 import com.riddleboox.app.ui.openPaperWindow
 import java.io.File
 import java.util.UUID
@@ -120,6 +127,15 @@ class MainActivity : Activity() {
     private lateinit var root: FrameLayout
     /** Non-null only while [showOnboardingPermissionOverlay]'s overlay is on screen. */
     private var onboardingPermissionOverlay: View? = null
+    /**
+     * Non-null only when a diary is configured to be asked — a keyless,
+     * deliberately offline diary (see [SettingsStore]) has no use for a
+     * "no internet" banner. Started/stopped with the debug receivers in
+     * [onResume]/[onPause].
+     */
+    private var offlineWatcher: OfflineWatcher? = null
+    /** Non-null exactly when [offlineWatcher] is — [drawingRect] keeps the pen out of the strip while it is visible. */
+    private var offlineBanner: View? = null
 
     private val inkCallbacks = object : InkCaptureController.Callbacks {
         override fun onPenDown(): Boolean = stateMachine.onPenDown()
@@ -150,6 +166,7 @@ class MainActivity : Activity() {
      * adb shell "am broadcast -a com.riddleboox.app.DEBUG_CONTROL --es cmd 'state'"
      * adb shell "am broadcast -a com.riddleboox.app.DEBUG_CONTROL --es cmd 'position'"
      * adb shell "am broadcast -a com.riddleboox.app.DEBUG_CONTROL --es cmd 'write some text'"
+     * adb shell "am broadcast -a com.riddleboox.app.DEBUG_CONTROL --es cmd 'bookcheck'"
      * ```
      * `am broadcast` sends an ordered broadcast and blocks to print the
      * receiver's `setResultData`, so the outcome comes back in the same adb
@@ -169,6 +186,12 @@ class MainActivity : Activity() {
                 cmd == "state" -> stateMachine.debugStateSummary()
                 cmd == "position" -> stateMachine.debugReplyPosition()
                 cmd.startsWith("write ") -> stateMachine.debugWriteReplyInk(cmd.removePrefix("write "))
+                cmd == "bookcheck" -> when (val result = checkBookAccess(contentResolver)) {
+                    BookAccessCheck.PermissionMissing -> "permission missing"
+                    BookAccessCheck.LibraryEmpty -> "granted, library empty"
+                    BookAccessCheck.Readable -> "granted, book opened fine"
+                    is BookAccessCheck.Unreadable -> "granted, unreadable: ${result.reason}"
+                }
                 else -> "rejected: unknown cmd '$cmd'"
             }
         }
@@ -204,55 +227,75 @@ class MainActivity : Activity() {
         regionView = RegionView(this)
         val replyFontSize = ReplyFontSizeStore(this).read()
         regionView.replyFontSizePx = replyFontSize.px
+        val penStyle = PenStyleStore(this).read()
+        val penWidth = PenStrokeWidthStore(this).read()
+        regionView.penStyle = penStyle
+        regionView.penWidthScale = penWidth.scale
 
         val sendMode = SendModeStore(this).read()
 
         // An imprint line, not a status bar: quiet caption type, low contrast,
         // so it reads like the tiny print at the foot of a book page rather
         // than app chrome competing with the ink.
+        //
+        // Up only while something is actually happening — see [onBusyChanged].
+        // A waiting page has nothing to report, and a caption standing there
+        // saying so is one more thing on a line the ink already shares.
+        // INVISIBLE rather than GONE: this caption carries the row's whole
+        // slack (weight 1), so removing it would slide every control on the
+        // far end across the paper each time a turn begins.
         statusView = caption(idleStatus(sendMode)).apply {
-            setPadding(dp(24), 0, dp(8), 0)
-            // The stop label sits directly after these words, so the line's
-            // slack moves behind it ([chromeSpacer]) and the caption takes
-            // only the room it needs. A lookup note can run long — it is cut
-            // rather than allowed to push the controls off the far end.
+            visibility = View.INVISIBLE
+            setPadding(dp(6), 0, dp(8), 0)
+            // A lookup note can run long — it is cut rather than allowed to
+            // push the controls off the far end. The stop label sits directly
+            // after these words, inside the room this caption is given.
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
-        // It belongs to the status line, not to the controls at the far end:
-        // what it stops is the thing the status line is reporting, and a word
-        // that acts on "Writing a reply…" has to stand next to those words to be
-        // read as answering them. Same plain caption style as every other
-        // control on this line — it is only ever up while a turn is in
-        // flight, so there is never another label beside it to confuse it with.
-        stopLabel = caption("stop").apply {
+        // Stands alone at the far end, in the room the menu has just given up:
+        // while a turn runs the line holds exactly two things, what is
+        // happening and the word that ends it, one at each margin. Far from the
+        // status rather than beside it, because a tap that lands one word off
+        // should not be able to end a reply the writer wanted. Same plain
+        // caption style as every other control on this line — it is only ever
+        // up while a turn is in flight, so there is never another label beside
+        // it to confuse it with.
+        stopLabel = caption("stop", R.drawable.ic_chrome_stop).apply {
             setPadding(dp(6), 0, dp(6), 0)
             visibility = View.GONE
             setOnClickListener { stateMachine.stopNow() }
         }
-        val sendLabel = caption("send").apply {
+        val sendLabel = caption("send", R.drawable.ic_chrome_send).apply {
             setPadding(dp(6), 0, dp(6), 0)
             visibility = sendVisibility(sendMode)
         }
-        val newPageLabel = caption("new page").apply {
+        val newConversationLabel = caption("new conversation", R.drawable.ic_chrome_new_conversation).apply {
             setPadding(dp(6), 0, dp(6), 0)
         }
-        val memorizeLabel = caption("memorize").apply {
+        val memorizeLabel = caption("memorize", R.drawable.ic_chrome_memorize).apply {
             setPadding(dp(6), 0, dp(6), 0)
         }
-        val agentLabel = caption(selectedAgent.name.lowercase()).apply {
+        val agentLabel = caption(selectedAgent.name.lowercase(), R.drawable.ic_chrome_agent).apply {
             setPadding(dp(6), 0, dp(6), 0)
         }
-        val historyLabel = caption("history").apply {
+        val historyLabel = caption("history", R.drawable.ic_chrome_history).apply {
             setPadding(dp(6), 0, dp(6), 0)
         }
-        val settingsLabel = caption("settings").apply {
-            setPadding(dp(6), 0, dp(24), 0)
+        val settingsLabel = caption("settings", R.drawable.ic_chrome_settings).apply {
+            setPadding(dp(6), 0, dp(6), 0)
         }
-        // What splits the line in two: what this page does, and where else the
-        // writer can go. Everything used to sit at one even spacing, which read
-        // as six unrelated words rather than two handfuls.
-        val groupRule = View(this).apply { setBackgroundColor(Color.BLACK) }
+        // Everything on this line that is not the status and not [stopLabel]:
+        // the whole of it goes away while a turn is in flight — see
+        // [onBusyChanged]. [sendLabel] is left out because it has a second
+        // reason to be hidden ([sendVisibility]) and is restored through that.
+        val menuLabels = listOf(
+            newConversationLabel,
+            memorizeLabel,
+            agentLabel,
+            historyLabel,
+            settingsLabel,
+        )
 
         chromeRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -260,31 +303,38 @@ class MainActivity : Activity() {
             // it sits on the same centre line instead of each padding itself
             // down by a different amount.
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, chromeTopInset(), 0, dp(6))
-            addView(
-                statusView,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { weight = 0f },
-            )
-            addView(stopLabel, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ))
-            // The empty middle of the line: what keeps the page's own controls
-            // at the far end while the status and its stop label stay together
-            // at this one.
-            addView(View(this@MainActivity), LinearLayout.LayoutParams(0, dp(1), 1f))
-            listOf(sendLabel, newPageLabel, memorizeLabel).forEach {
+            // The margin lives on the row, not on the labels at either end of
+            // it: [sendLabel] comes and goes with the send mode and the whole
+            // menu goes away mid-turn, so whichever label happens to be first
+            // or last still opens and closes the line in the same place. It is
+            // the column's margin rather than a number of its own — the first
+            // label stands over the first letter of the hand written below it,
+            // the way a running head sits over its column — less the padding
+            // that label carries itself.
+            val sideInset = HandwritingPlanner.DEFAULT_MARGIN_X_PX.toInt() - dp(6)
+            setPadding(sideInset, chromeTopInset(), sideInset, dp(6))
+            // What splits the line in two: what this page does, at the margin
+            // the ink below it starts from, and where else the writer can go,
+            // at the far end. The gap between them is [statusView], which
+            // carries the row's whole slack (weight 1) — so the empty middle of
+            // the line *is* the caption, and it gives that room up first when
+            // a long lookup note needs it. A caption measured at WRAP_CONTENT
+            // instead takes what its words need and pushes the last control off
+            // the paper — the one thing its ellipsize is there to prevent.
+            listOf(sendLabel, newConversationLabel, memorizeLabel).forEach {
                 addView(it, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                 ))
             }
-            addView(groupRule, LinearLayout.LayoutParams(dp(1), dp(18)).apply {
-                setMargins(dp(22), 0, dp(22), 0)
-            })
+            addView(
+                statusView,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(stopLabel, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
             listOf(agentLabel, historyLabel, settingsLabel).forEach {
                 addView(it, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -310,7 +360,15 @@ class MainActivity : Activity() {
         }
         setContentView(root)
 
-        inkCapture = InkCaptureController(this, penSurface, strokeStore, inkCallbacks, ::drawingRect)
+        inkCapture = InkCaptureController(
+            this,
+            penSurface,
+            strokeStore,
+            inkCallbacks,
+            ::drawingRect,
+            penStyle = penStyle,
+            penWidthScale = penWidth.scale,
+        )
         conversationStore = ConversationStore(this)
 
         buildDefaults = ReplySettings(
@@ -337,6 +395,8 @@ class MainActivity : Activity() {
             toolbox = agentToolbox(replySettings),
             handwritingPlanner = handwritingPlanner,
             replyFontSizePx = replyFontSize.px,
+            penStyle = penStyle,
+            penWidthScale = penWidth.scale,
             conversationStore = conversationStore,
             // Debug builds only, and deliberately in external files: this
             // exists so the writer can open the page on the tablet itself and
@@ -352,9 +412,43 @@ class MainActivity : Activity() {
             onStatusChanged = { statusView.text = it },
             onBusyChanged = { busy ->
                 diaryBusy = busy
+                // The line has one job at a time: while a turn runs it reports
+                // that turn and offers the one word that ends it, and the rest
+                // of the chrome goes away. Every label on it acts on the page —
+                // starting a new conversation, memorizing, leaving for another
+                // screen — and none of them are things to do to a page that is
+                // mid-answer; hidden is clearer than present-and-ignored on a
+                // panel that has no press state to say a tap did nothing.
+                statusView.visibility = if (busy) View.VISIBLE else View.INVISIBLE
                 stopLabel.visibility = if (busy) View.VISIBLE else View.GONE
+                sendLabel.visibility =
+                    if (busy) View.GONE else sendVisibility(stateMachine.sendMode)
+                menuLabels.forEach { it.visibility = if (busy) View.GONE else View.VISIBLE }
             },
         )
+
+        if (replySettings != null) {
+            // Added after the chrome but before the onboarding overlays, so a
+            // full-screen intro still covers the strip.
+            val banner = offlineBanner(this) {
+                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+            }
+            banner.visibility = View.GONE
+            root.addView(banner, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM,
+            ))
+            offlineBanner = banner
+            offlineWatcher = OfflineWatcher(this) { offline ->
+                banner.visibility = if (offline) View.VISIBLE else View.GONE
+                // A GONE view gets no layout pass of its own, so the hide
+                // path re-limits the pen here; the show path is finished by
+                // the relimit listener once the strip has a height.
+                maybeAttach()
+                refreshRegion()
+            }
+        }
 
         val onboardingStore = OnboardingStore(this)
         onboardingSeen = onboardingStore.read()
@@ -408,6 +502,7 @@ class MainActivity : Activity() {
         }
         regionView.addOnLayoutChangeListener(relimit)
         chromeRow.addOnLayoutChangeListener(relimit)
+        offlineBanner?.addOnLayoutChangeListener(relimit)
 
         penSurface.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
@@ -427,7 +522,7 @@ class MainActivity : Activity() {
         })
 
         sendLabel.setOnClickListener { stateMachine.sendNow() }
-        newPageLabel.setOnClickListener { stateMachine.newPage() }
+        newConversationLabel.setOnClickListener { stateMachine.newConversation() }
         memorizeLabel.setOnClickListener { stateMachine.memorize() }
         historyLabel.setOnClickListener {
             startActivityForResult(HistoryActivity.intent(this, selectedAgent.id), REQUEST_HISTORY)
@@ -494,7 +589,19 @@ class MainActivity : Activity() {
         }
         val overlay = permissionOverlay(
             this,
-            onAllow = { startActivityForResult(grantScreen, REQUEST_ONBOARDING_PERMISSION) },
+            onAllow = {
+                // All-files access alone was found not to be enough on at
+                // least one Android 11 device — the switch reads as on, yet
+                // every book still throws a permission denial until both
+                // legacy storage permissions are also granted. See
+                // AndroidManifest.xml's note on READ/WRITE_EXTERNAL_STORAGE.
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                    REQUEST_READ_STORAGE,
+                )
+                startActivityForResult(grantScreen, REQUEST_ONBOARDING_PERMISSION)
+            },
             onSkip = { testBookAccessThenResumeOnboarding() },
         )
         onboardingPermissionOverlay = overlay
@@ -541,6 +648,11 @@ class MainActivity : Activity() {
             openReader = { book ->
                 withContext(Dispatchers.Main.immediate) { openBookInReader(book) }
             },
+            // Extracted chapter text survives between turns and app runs, so a
+            // second search through the same large book is a file read, not
+            // another full pass over the zip. Android may sweep cacheDir when
+            // storage runs low, which just means the next search re-extracts.
+            textCacheDir = File(cacheDir, "booktext"),
         )
     }
 
@@ -696,13 +808,18 @@ class MainActivity : Activity() {
      * or press them. Handing the SDK a limit rect that stops at the chrome's
      * bottom edge means the pen simply is not read up there, which is a
      * stronger guarantee than hoping nobody touches it.
+     *
+     * The offline banner borrows the bottom edge the same way while it is
+     * visible: its "wi-fi settings" tap must not double as an ink dot, and
+     * raw pen capture ignores ordinary view hit-testing entirely.
      */
     private fun drawingRect(): Rect {
         val w = penSurface.width
         val h = penSurface.height
         if (w <= 0 || h <= 0) return Rect(0, 0, 0, 0)
-        val top = if (::chromeRow.isInitialized) chromeRow.height else 0
-        return Rect(0, top.coerceAtMost(h), w, h)
+        val top = (if (::chromeRow.isInitialized) chromeRow.height else 0).coerceAtMost(h)
+        val bannerHeight = offlineBanner?.takeIf { it.visibility == View.VISIBLE }?.height ?: 0
+        return Rect(0, top, w, (h - bannerHeight).coerceAtLeast(top))
     }
 
     private fun refreshRegion() {
@@ -740,6 +857,7 @@ class MainActivity : Activity() {
         } else if (onboardingStarted) {
             onboardingController?.start()
         }
+        offlineWatcher?.start()
         if (BuildConfig.DEBUG) {
             ContextCompat.registerReceiver(
                 this,
@@ -757,6 +875,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        offlineWatcher?.stop()
         if (BuildConfig.DEBUG) {
             unregisterReceiver(demoWriteReceiver)
             unregisterReceiver(debugControlReceiver)
@@ -784,6 +903,7 @@ class MainActivity : Activity() {
         private const val REQUEST_HISTORY = 2
         private const val REQUEST_AGENTS = 3
         private const val REQUEST_ONBOARDING_PERMISSION = 4
+        private const val REQUEST_READ_STORAGE = 5
 
         /** Index into ONBOARDING_SEGMENTS after which the all-files-access ask happens — see [showOnboardingPermissionOverlay]. */
         private const val ONBOARDING_PERMISSION_CHECKPOINT = 4

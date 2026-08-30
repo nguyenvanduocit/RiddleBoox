@@ -44,9 +44,6 @@ fun isRateLimited(reason: String): Boolean =
         reason.contains("rate limit", ignoreCase = true)
 
 fun excuseFor(reason: String): String = when {
-    reason.contains("no key", ignoreCase = true) ->
-        "The ink dries and no voice answers — the diary has not been given one yet."
-
     reason.contains("blank page", ignoreCase = true) ->
         "There is nothing written here to answer."
 

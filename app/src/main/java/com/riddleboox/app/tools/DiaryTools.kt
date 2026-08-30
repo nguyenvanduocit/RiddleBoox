@@ -4,6 +4,7 @@ import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.agents.core.tools.ToolParameterDescriptor
 import ai.koog.agents.core.tools.ToolParameterType
 import com.riddleboox.app.library.Book
+import com.riddleboox.app.library.CachedEpub
 import com.riddleboox.app.library.Epub
 import com.riddleboox.app.library.Highlight
 import com.riddleboox.app.library.Library
@@ -41,8 +42,28 @@ private const val FORGET_DIARY = "forget_diary"
  */
 private const val READ_CHARS = 5000
 
+/**
+ * The most [READ_BOOK] will hand back in one call when the model asks for
+ * more than the default — most chapters of a novel fit under this, so one
+ * call reads the whole thing instead of an offset-loop of several.
+ */
+private const val READ_CHARS_MAX = 20_000
+
 /** Beyond this a table of contents is a wall of text, not an index. */
 private const val CHAPTERS_LISTED = 200
+
+/**
+ * How much text sits on each side of a match [SEARCH_IN_BOOK] finds, by
+ * default and at most.
+ *
+ * The old default (a sentence or so) was tuned for a human eye and forced a
+ * second call to [READ_BOOK] to see what came before or after — for a model
+ * spending one of three lookups a turn, that second call is the budget.
+ * Wider by default is paid for once, at the point the words are already
+ * being quoted, rather than in a lookup that only exists to ask again.
+ */
+private const val CONTEXT_CHARS = 700
+private const val CONTEXT_CHARS_MAX = 2_000
 
 /** A marked passage is a sentence or two; anything longer was a slip of the finger. */
 private const val QUOTE_CHARS = 400
@@ -88,7 +109,32 @@ class DiaryTools(
     private val openBook: (Book) -> Epub? = { Epub.open(File(it.path)) },
     private val openReader: suspend (Book) -> Boolean = { false },
     private val booksReadable: () -> Boolean = ::canOpenBooks,
+    /**
+     * Where extracted chapter text is kept between openings — see [CachedEpub].
+     * Null (the default, and every test's) reads straight from the zip each
+     * time, which is correct and merely slow on very large books.
+     */
+    private val textCacheDir: File? = null,
 ) : Toolbox {
+
+    /** [openBook], wrapped in the per-book text cache when one is configured. */
+    private fun openCached(book: Book): CachedEpub? {
+        val epub = openBook(book) ?: return null
+        val dir = textCacheDir?.let { File(it, cacheKey(book.id)) }
+        return CachedEpub(epub, dir, fingerprint(book))
+    }
+
+    /** A directory name for [id] that no library's id scheme can make unsafe. */
+    private fun cacheKey(id: String): String =
+        java.security.MessageDigest.getInstance("SHA-1")
+            .digest(id.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+    /** What identifies the current bytes of the book's file — see [CachedEpub]. */
+    private fun fingerprint(book: Book): String {
+        val file = File(book.path)
+        return "${file.length()}-${file.lastModified()}"
+    }
 
     override val tools: List<ToolDescriptor> = listOf(
         ToolDescriptor(
@@ -123,25 +169,38 @@ class DiaryTools(
         ToolDescriptor(
             name = READ_BOOK,
             description = "The actual words of one chapter of a book. EPUB only; a PDF cannot be read this way. " +
-                "Long chapters come back in pieces — the answer says where it was cut.",
+                "Long chapters come back in pieces by default — the answer says where it was cut. Ask for " +
+                "more with max_chars, up to $READ_CHARS_MAX, to read a whole chapter in one call.",
             requiredParameters = listOf(
                 ToolParameterDescriptor("book", "A title, or enough of one to know it by.", ToolParameterType.String),
                 ToolParameterDescriptor("chapter", "Chapter number as $BOOK_CONTENTS gave it.", ToolParameterType.Integer),
             ),
             optionalParameters = listOf(
                 ToolParameterDescriptor("offset", "Skip this many characters, to read on past a cut.", ToolParameterType.Integer),
+                ToolParameterDescriptor(
+                    "max_chars",
+                    "How many characters to read at once. Default $READ_CHARS, up to $READ_CHARS_MAX.",
+                    ToolParameterType.Integer,
+                ),
             ),
         ),
         ToolDescriptor(
             name = SEARCH_IN_BOOK,
-            description = "Find a phrase inside a book and read the passages around it, without " +
-                "knowing which chapter it is in. EPUB only.",
+            description = "Grep a book with a regular expression and read the passage around each match, " +
+                "without knowing which chapter it is in. EPUB only. Tones and case are ignored on both " +
+                "sides — 'co ma thap gia' finds 'Cổ Ma Tháp Già'. A plain phrase works as-is; escape " +
+                "( ) [ ] . * with a backslash to match them literally.",
             requiredParameters = listOf(
                 ToolParameterDescriptor("book", "A title, or enough of one to know it by.", ToolParameterType.String),
-                ToolParameterDescriptor("query", "The phrase to look for.", ToolParameterType.String),
+                ToolParameterDescriptor("query", "The regular expression to look for. A plain phrase is fine.", ToolParameterType.String),
             ),
             optionalParameters = listOf(
                 ToolParameterDescriptor("limit", "How many passages. Default $PASSAGES_FOUND.", ToolParameterType.Integer),
+                ToolParameterDescriptor(
+                    "context_chars",
+                    "How much text around each match. Default $CONTEXT_CHARS, up to $CONTEXT_CHARS_MAX.",
+                    ToolParameterType.Integer,
+                ),
             ),
         ),
         ToolDescriptor(
@@ -224,11 +283,13 @@ class DiaryTools(
                     arguments.text("book"),
                     arguments.count("chapter", 1),
                     arguments.count("offset", 0),
+                    arguments.count("max_chars", READ_CHARS, 1..READ_CHARS_MAX),
                 )
                 SEARCH_IN_BOOK -> searchInBook(
                     arguments.text("book"),
                     arguments.text("query"),
                     arguments.count("limit", PASSAGES_FOUND, 0..MOST),
+                    arguments.count("context_chars", CONTEXT_CHARS, 1..CONTEXT_CHARS_MAX),
                 )
                 READ_HIGHLIGHTS -> readHighlights(arguments.text("book"), arguments.count("limit", MARKS_LISTED, 0..MOST))
                 RECALL_DIARY -> recallDiary(arguments.text("query"), arguments.count("limit", EVENINGS_RECALLED, 0..MOST))
@@ -314,7 +375,7 @@ class DiaryTools(
         val head = shelfLine(book, library.highlights(book.id).size)
         if (!book.isEpub) return "$head\nOnly an EPUB can be opened and read; this is a ${book.format}. " +
             "What the writer marked in it can still be read with $READ_HIGHLIGHTS."
-        val epub = openBook(book) ?: return "$head\n${unopenable(book)}"
+        val epub = openCached(book) ?: return "$head\n${unopenable(book)}"
         return epub.use {
             if (it.chapters.isEmpty()) return@use "$head\nThis book lists no chapters."
             val shown = it.chapters.take(CHAPTERS_LISTED)
@@ -327,11 +388,11 @@ class DiaryTools(
         }
     }
 
-    private fun readBook(query: String, chapter: Int, offset: Int): String {
+    private fun readBook(query: String, chapter: Int, offset: Int, maxChars: Int): String {
         val book = library.books().named(query) ?: return unknown(query)
         if (!book.isEpub) return "\"${book.title}\" is a ${book.format} and cannot be read from the inside. " +
             "What the writer marked in it can be read with $READ_HIGHLIGHTS."
-        val epub = openBook(book) ?: return unopenable(book)
+        val epub = openCached(book) ?: return unopenable(book)
         return epub.use {
             val index = chapter - 1
             if (index !in it.chapters.indices) {
@@ -340,7 +401,7 @@ class DiaryTools(
             val text = it.text(index)
             if (text.isBlank()) return@use "Chapter $chapter of \"${book.title}\" has no words in it."
             val from = offset.coerceIn(0, text.length)
-            val to = (from + READ_CHARS).coerceAtMost(text.length)
+            val to = (from + maxChars).coerceAtMost(text.length)
             val head = "\"${book.title}\", chapter $chapter — ${it.chapters[index].title} " +
                 "(characters $from to $to of ${text.length})"
             val tail = if (to < text.length) "\n[cut here; call $READ_BOOK again with offset=$to to read on]" else ""
@@ -348,13 +409,15 @@ class DiaryTools(
         }
     }
 
-    private fun searchInBook(query: String, phrase: String, limit: Int): String {
+    private fun searchInBook(query: String, phrase: String, limit: Int, contextChars: Int): String {
         if (phrase.isEmpty()) return "Nothing was given to look for."
         val book = library.books().named(query) ?: return unknown(query)
         if (!book.isEpub) return "\"${book.title}\" is a ${book.format} and cannot be searched from the inside."
-        val epub = openBook(book) ?: return unopenable(book)
+        val epub = openCached(book) ?: return unopenable(book)
         return epub.use {
-            val found = it.passages(phrase, limit)
+            val found = runCatching { it.passages(phrase, limit, contextChars) }.getOrElse { error ->
+                return@use "\"$phrase\" is not a valid regular expression: ${error.message ?: error.javaClass.simpleName}"
+            }
             if (found.isEmpty()) return@use "\"$phrase\" does not appear in \"${book.title}\"."
             "${found.size} passages in \"${book.title}\" containing \"$phrase\":\n" +
                 found.joinToString("\n") { p -> "chapter ${p.chapter + 1} — ${p.chapterTitle}: ${p.text}" }

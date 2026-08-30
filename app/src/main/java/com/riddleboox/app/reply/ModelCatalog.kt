@@ -38,6 +38,25 @@ fun fetchModelIds(baseUrl: String, apiKey: String): List<String> {
 }
 
 /**
+ * Model-id prefixes for OpenAI families known to read images. Matched by
+ * prefix rather than exact id so a new dated snapshot or point release in the
+ * same family (`gpt-5.7-...`) is picked up without a code change; only the
+ * family has to be added here once it ships.
+ */
+private val OPENAI_VISION_FAMILY_PREFIXES = listOf(
+    "gpt-4o",
+    "gpt-4.1",
+    "gpt-4.5",
+    "gpt-4-turbo",
+    "gpt-4-vision",
+    "gpt-5",
+    "chatgpt-4o",
+    "o1",
+    "o3",
+    "o4",
+)
+
+/**
  * Ids out of an OpenAI-shaped `{"data":[{"id":…}]}` list, sorted for a
  * scrollable picker.
  *
@@ -45,8 +64,9 @@ fun fetchModelIds(baseUrl: String, apiKey: String): List<String> {
  * `architecture.input_modalities`), models that cannot read an image are
  * dropped: this diary sends every page as a picture, and a text-only model
  * would fail on the first turn. OpenAI's list says nothing about modalities,
- * and silence keeps the model — better an id the writer must judge than an
- * empty list.
+ * so an id is kept only when it matches a known vision family prefix
+ * ([OPENAI_VISION_FAMILY_PREFIXES]) — otherwise embeddings, Whisper, TTS,
+ * DALL-E and other non-chat ids would clutter the picker.
  */
 fun parseModelIds(json: String): List<String> {
     val data = Json.parseToJsonElement(json).jsonObject["data"] ?: return emptyList()
@@ -59,7 +79,12 @@ fun parseModelIds(json: String): List<String> {
         .filter { entry ->
             val modalities = ((entry["architecture"] as? JsonObject)?.get("input_modalities") as? JsonArray)
                 ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-            modalities == null || "image" in modalities
+            val id = (entry["id"] as? JsonPrimitive)?.contentOrNull
+            when {
+                modalities != null -> "image" in modalities
+                id != null -> OPENAI_VISION_FAMILY_PREFIXES.any { id.startsWith(it) }
+                else -> false
+            }
         }
         .mapNotNull { (it["id"] as? JsonPrimitive)?.contentOrNull }
         .distinct()

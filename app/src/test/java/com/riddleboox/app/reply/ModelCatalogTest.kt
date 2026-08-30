@@ -31,20 +31,24 @@ class ModelCatalogTest {
         assertEquals(listOf("sighted/vision"), parseModelIds(json))
     }
 
-    /** OpenAI's list carries no modality info; silence must not empty the list. */
+    /**
+     * OpenAI's list carries no modality info, so ids are kept only when they
+     * match a known vision family (`gpt-4o`, `gpt-5`, ...) — a bare `o3-mini`
+     * would otherwise sit next to embeddings and TTS ids the picker cannot use.
+     */
     @Test
-    fun `keeps every model when the server says nothing about modalities`() {
-        val json = """{"data":[{"id":"b-model"},{"id":"a-model"}]}"""
+    fun `when the server says nothing about modalities, keeps only known vision families`() {
+        val json = """{"data":[{"id":"text-embedding-3-large"},{"id":"gpt-4o-mini"},{"id":"gpt-5.7-luna"}]}"""
 
-        assertEquals(listOf("a-model", "b-model"), parseModelIds(json))
+        assertEquals(listOf("gpt-4o-mini", "gpt-5.7-luna"), parseModelIds(json))
     }
 
     /** Some self-hosted proxies write `"architecture": null`; one odd entry must not sink the list. */
     @Test
-    fun `a null architecture keeps the model rather than failing the parse`() {
-        val json = """{"data":[{"id":"proxy/model","architecture":null},{"id":"other/model"}]}"""
+    fun `a null architecture falls back to the vision-family check rather than failing the parse`() {
+        val json = """{"data":[{"id":"gpt-4o","architecture":null},{"id":"whisper-1"}]}"""
 
-        assertEquals(listOf("other/model", "proxy/model"), parseModelIds(json))
+        assertEquals(listOf("gpt-4o"), parseModelIds(json))
     }
 
     @Test
@@ -54,11 +58,11 @@ class ModelCatalogTest {
 
     @Test
     fun `asks v1 models with the key as a bearer token`() {
-        val body = """{"data":[{"id":"openai/gpt-5.6-luna"}]}"""
+        val body = """{"data":[{"id":"gpt-5.6-luna"}]}"""
         FakeChatServer(httpOk(body)).use { server ->
             val ids = fetchModelIds(server.baseUrl, "sk-test-key")
 
-            assertEquals(listOf("openai/gpt-5.6-luna"), ids)
+            assertEquals(listOf("gpt-5.6-luna"), ids)
             val request = server.takeRequest()
             assertEquals("/v1/models", request.path)
             assertEquals("Bearer sk-test-key", request.authorization)

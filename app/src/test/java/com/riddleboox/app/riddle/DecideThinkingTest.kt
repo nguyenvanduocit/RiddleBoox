@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Waiting on the diary — the retry budget, the patience clock, the blot.
+ * Waiting on the diary — the retry budget, the blot.
  *
  * This is where five of the eight bugs found in the last review of this class
  * lived, and it had no test of any kind: the logic was reachable only through a
@@ -42,7 +42,6 @@ class DecideThinkingTest {
         val replying = decision.state as RiddleState.Replying
 
         assertTrue("the stream is still open", !replying.streamEnded)
-        assertEquals(400, replying.lastArrivalAtMs)
         assertEquals(
             listOf(Effect.BeginReply(REPLY_TOP_PX), Effect.FeedReply("Ta hiểu")),
             decision.effects.filter { it is Effect.BeginReply || it is Effect.FeedReply },
@@ -95,27 +94,17 @@ class DecideThinkingTest {
     }
 
     /**
-     * Deliberate, and easy to "fix" by mistake: a turn that spends two minutes
-     * reading the writer's library is a turn the writer has stopped waiting for,
-     * so a lookup does not buy the diary more time.
+     * Deliberate: a search through a large book is progress, not a stall, and
+     * Thinking has no clock of its own — a turn runs until an answer, a
+     * network-level timeout, or the retry budget below is spent. Whatever a
+     * lookup takes, it takes.
      */
     @Test
-    fun `a lookup does not buy the diary more patience`() {
+    fun `a lookup never times out on its own, however long it takes`() {
         val s = thinking(startedAtMs = 0)
-        val looked = decide(s, now = 1_000, event = ReplyEvent.Lookup("read_book"))!!.state
+        val looked = decide(s, now = 1_000, event = ReplyEvent.Lookup("read_book"))!!.state as RiddleState.Thinking
 
-        val decision = decideThinking(
-            looked as RiddleState.Thinking,
-            now = REPLY_PATIENCE_MS,
-            event = null,
-            page = page,
-            pageInFlight = inFlight,
-        )!!
-
-        assertTrue(
-            "patience is spent even though a lookup happened",
-            decision.effects.any { it == Effect.AbandonRequest },
-        )
+        assertNull(decideThinking(looked, now = 1_000L * 60 * 60 * 24, event = null, page = page, pageInFlight = inFlight))
     }
 
     // ---- failure ----
@@ -138,7 +127,7 @@ class DecideThinkingTest {
     /**
      * This panel's Wi-Fi drops DNS for tens of seconds whenever it changes
      * bands, which outlasts a three-attempt budget — so a request that never
-     * left the device keeps trying until the patience runs out instead.
+     * left the device keeps trying rather than giving up on it.
      */
     @Test
     fun `a request that never left the device keeps trying past the budget`() {
@@ -177,7 +166,7 @@ class DecideThinkingTest {
         assertEquals(1_000 + rateLimitRetryDelayMs(REPLY_RETRY_LIMIT + 6), next.retryAtMs)
     }
 
-    /** Each successive 429 waits longer, capped so it still fits several attempts inside the patience budget. */
+    /** Each successive 429 waits longer, up to the cap. */
     @Test
     fun `a provider throttle backs off further on each attempt, up to the cap`() {
         var s = thinking()
@@ -206,42 +195,19 @@ class DecideThinkingTest {
         )
     }
 
-    @Test
-    fun `patience running out gives up on the request before writing the excuse`() {
-        val decision = decide(thinking(startedAtMs = 0), now = REPLY_PATIENCE_MS)!!
-
-        assertEquals(
-            "the request is dropped first, or its next delta lands on the excuse",
-            Effect.AbandonRequest,
-            decision.effects.first(),
-        )
-        assertEquals(
-            excuseFor("timed out"),
-            decision.effects.filterIsInstance<Effect.WriteText>().single().text,
-        )
-    }
-
-    @Test
-    fun `an excuse is never recorded as a turn that happened`() {
-        val decision = decide(thinking(startedAtMs = 0), now = REPLY_PATIENCE_MS)!!
-
-        assertTrue(decision.effects.none { it is Effect.RecordTurn })
-    }
-
     // ---- the waiting itself ----
 
     /**
      * The panel repaints by flashing, so anything on a clock is paid for in
-     * flashes. A 600ms pulse over the full patience budget is up to two hundred
-     * of them for one wait, and it tells the writer nothing they did not
-     * already know. Ticking on an unchanged wait must produce nothing at all.
+     * flashes. Ticking on an unchanged wait must produce nothing at all,
+     * however long the wait runs — there is no patience budget to spend.
      */
     @Test
     fun `waiting with no news changes nothing, however long it waits`() {
         assertNull(decide(thinking(), now = 599))
         assertNull(decide(thinking(), now = 600))
         assertNull(decide(thinking(), now = 5_000))
-        assertNull(decide(thinking(), now = REPLY_PATIENCE_MS - 1))
+        assertNull(decide(thinking(), now = 1_000L * 60 * 60 * 24))
     }
 
     /** What replaces the blot: the caption, worded by whoever did the looking. */

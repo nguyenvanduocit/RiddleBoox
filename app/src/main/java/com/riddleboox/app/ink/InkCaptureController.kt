@@ -12,6 +12,7 @@ import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.TouchHelper
 import com.onyx.android.sdk.pen.data.TouchPointList
 import com.riddleboox.app.riddle.PenGate
+import com.riddleboox.app.settings.PenStyle
 
 /**
  * Isolates all Onyx pen SDK usage. Falls back to plain MotionEvent input when
@@ -26,6 +27,8 @@ class InkCaptureController(
     private val strokeStore: StrokeStore,
     private val callbacks: Callbacks,
     private val pageRectProvider: () -> Rect,
+    private val penStyle: PenStyle = PenStyle.Default,
+    private val penWidthScale: Float = 1f,
 ) : PenGate {
     interface Callbacks {
         fun onPenDown(): Boolean
@@ -274,11 +277,19 @@ class InkCaptureController(
             getY() == other.getY() &&
             getPressure() == other.getPressure()
 
+    /**
+     * The nib width scales with [penStyle]/[penWidthScale] the same way the
+     * repaint's own [com.riddleboox.app.ink.inkRadiusPx] does at full
+     * pressure — [STROKE_WIDTH_MM] is that relationship anchored to
+     * [PenStyle.Ballpoint] at scale 1.0, so a writer who never opens the pen
+     * settings gets the exact millimetre value this was tuned against.
+     */
     private fun strokeWidthPx(): Float {
         val xdpi = appContext.resources.displayMetrics.xdpi
             .takeIf { it.isFinite() && it > 0f }
             ?: FALLBACK_XDPI
-        return xdpi / MILLIMETERS_PER_INCH * STROKE_WIDTH_MM
+        val diameterRatio = (penStyle.maxRadiusPx * 2f * penWidthScale) / DEFAULT_NIB_DIAMETER_PX
+        return xdpi / MILLIMETERS_PER_INCH * STROKE_WIDTH_MM * diameterRatio
     }
 
     /**
@@ -309,6 +320,8 @@ class InkCaptureController(
          * to agree or the stroke jumps when the repaint takes over.
          */
         private const val STROKE_WIDTH_MM = 0.6f
+        /** [PenStyle.Ballpoint]'s full-pressure diameter — what [STROKE_WIDTH_MM] was tuned against. */
+        private val DEFAULT_NIB_DIAMETER_PX = PenStyle.Default.maxRadiusPx * 2f
         private const val FALLBACK_RAW_PRESSURE_MAX = 4096f
     }
 }

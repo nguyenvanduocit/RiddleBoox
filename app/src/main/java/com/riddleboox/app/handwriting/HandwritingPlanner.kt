@@ -75,7 +75,7 @@ class HandwritingPlanner(
          * deriving a line height from a non-default, user-chosen font size scales by. */
         const val LINE_HEIGHT_RATIO = DEFAULT_LINE_HEIGHT_PX / DEFAULT_FONT_SIZE_PX
         const val DEFAULT_JITTER_PX = 3f
-        const val DEFAULT_MARGIN_X_PX = 56f
+        const val DEFAULT_MARGIN_X_PX = 40f
 
         /**
          * Air between paragraphs, a third of a line rather than a whole one.

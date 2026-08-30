@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Aged paper, not stark white — the one warm note in an otherwise
-         monochrome app; BOOX launchers that force grayscale still read it
-         as a light page rather than pure white. -->
-    <color name="ic_launcher_background">#F2ECDD</color>
+    <!-- Matches the landing page brand mark (pages/styles.css ink token):
+         a dark circle behind the italic "R", so the app icon and the site
+         badge read as the same mark. -->
+    <color name="ic_launcher_background">#111310</color>
 </resources>

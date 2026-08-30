@@ -15,6 +15,7 @@ import com.riddleboox.app.handwriting.WriteStroke
 import com.riddleboox.app.handwriting.replyStrokeWidthPx
 import com.riddleboox.app.ink.inkRadiusPx
 import com.riddleboox.app.riddle.PageRect
+import com.riddleboox.app.settings.PenStyle
 import com.riddleboox.app.riddle.PageRenderState
 import com.riddleboox.app.riddle.isDissolvedAt
 
@@ -45,6 +46,16 @@ class RegionView @JvmOverloads constructor(
             field = value
             replyPaint.strokeWidth = replyStrokeWidthPx(value)
         }
+
+    /** Which pen the writer's own ink looks drawn with — see [PenStyle]. */
+    var penStyle: PenStyle = PenStyle.Default
+        set(value) {
+            field = value
+            strokePaint.alpha = value.alpha
+        }
+
+    /** The writer's separate stroke-width setting — see [com.riddleboox.app.settings.PenStrokeWidth]. */
+    var penWidthScale: Float = 1f
 
     /**
      * Reply ink already written this turn, baked into a bitmap the way the
@@ -165,12 +176,13 @@ class RegionView @JvmOverloads constructor(
         val dissolve = current.dissolve
         for (stroke in current.userStrokes) {
             val points = stroke.points
+            val pointCount = points.size
             if (points.isEmpty()) continue
             if (points.size == 1) {
                 val p = points[0]
                 if (dissolve != null && isDissolvedAt(p.x.toInt(), p.y.toInt(), dissolve.stage, dissolve.stages)) continue
                 strokePaint.style = Paint.Style.FILL
-                canvas.drawCircle(p.x, p.y, inkRadiusPx(p.pressure), strokePaint)
+                canvas.drawCircle(p.x, p.y, inkRadiusPx(p.pressure, 0, pointCount, penStyle, penWidthScale), strokePaint)
                 continue
             }
             strokePaint.style = Paint.Style.STROKE
@@ -183,7 +195,8 @@ class RegionView @JvmOverloads constructor(
                 ) {
                     continue
                 }
-                strokePaint.strokeWidth = inkRadiusPx(a.pressure) + inkRadiusPx(b.pressure)
+                strokePaint.strokeWidth = inkRadiusPx(a.pressure, i - 1, pointCount, penStyle, penWidthScale) +
+                    inkRadiusPx(b.pressure, i, pointCount, penStyle, penWidthScale)
                 canvas.drawLine(a.x, a.y, b.x, b.y, strokePaint)
             }
         }
