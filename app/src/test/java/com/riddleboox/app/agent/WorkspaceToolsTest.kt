@@ -4,10 +4,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 
 class WorkspaceToolsTest {
 
@@ -76,6 +78,29 @@ class WorkspaceToolsTest {
 
         val appended = call(tools, "workspace_append", "path" to "note.txt", "content" to "world")
         assertEquals("Appended to note.txt (10 characters).", appended)
+    }
+
+    @Test
+    fun `list says when more entries remain beyond its cap`() {
+        repeat(101) { index -> File(folder.root, "file-${index.toString().padStart(3, '0')}.txt").writeText("x") }
+
+        val result = call(WorkspaceTools(folder.root), "workspace_list")
+
+        assertTrue(result.contains("[cut at 100 entries"))
+        assertFalse(result.contains("file-100.txt"))
+    }
+
+    @Test
+    fun `stat reports an ISO timestamp instead of raw epoch milliseconds`() {
+        val file = File(folder.root, "dated.txt").apply {
+            writeText("x")
+            setLastModified(1_700_000_000_000L)
+        }
+
+        val result = call(WorkspaceTools(folder.root), "workspace_stat", "path" to file.name)
+
+        assertTrue(result.contains("modified 2023-11-14T22:13:20Z"))
+        assertFalse(result.contains("1700000000000"))
     }
 
     /** `old_text` that self-overlaps (like "aa" in "aaa") must be counted the same way `replace` actually replaces it: non-overlapping. */

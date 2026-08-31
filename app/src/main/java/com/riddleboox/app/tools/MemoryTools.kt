@@ -3,6 +3,7 @@ package com.riddleboox.app.tools
 import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.agents.core.tools.ToolParameterDescriptor
 import ai.koog.agents.core.tools.ToolParameterType
+import com.riddleboox.app.library.fold
 import com.riddleboox.app.reply.Toolbox
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -147,14 +148,14 @@ class MemoryTools(
                 "whenever something about the writer is unclear, before asking them again or guessing.",
             requiredParameters = emptyList(),
             optionalParameters = listOf(
-                ToolParameterDescriptor("query", "Words to search for; empty returns the most recent.", ToolParameterType.String),
+                ToolParameterDescriptor("query", "Words to search for; every word must match, ignoring case and accents. Empty returns the most recent.", ToolParameterType.String),
                 ToolParameterDescriptor("limit", "How many. Default $MEMORIES_LISTED.", ToolParameterType.Integer),
             ),
         ),
         ToolDescriptor(
             name = FORGET_MEMORY,
             description = "Remove one remembered fact for good, named by the id $RECALL_MEMORIES prints " +
-                "beside it. Only when the writer says it is wrong or asks you to forget it.",
+                "beside it. Use when the fact is wrong or outdated, or the writer asks you to forget it.",
             requiredParameters = listOf(
                 ToolParameterDescriptor("id", "The id shown beside the memory, as printed or in full.", ToolParameterType.String),
             ),
@@ -197,7 +198,11 @@ class MemoryTools(
         val entries = readEntries()
         if (entries.isEmpty()) return "Nothing has been remembered yet."
         val wanted = query.trim()
-        val matches = if (wanted.isEmpty()) entries else entries.filter { it.content.contains(wanted, ignoreCase = true) }
+        val words = fold(wanted).split(Regex("\\s+")).filter(String::isNotBlank)
+        val matches = if (words.isEmpty()) entries else entries.filter { entry ->
+            val content = fold(entry.content)
+            words.all(content::contains)
+        }
         if (matches.isEmpty()) return "Nothing remembered mentions \"$wanted\"."
         val shown = matches.takeLast(limit).asReversed()
         return "${shown.size} of ${matches.size} remembered things, newest first:\n" +

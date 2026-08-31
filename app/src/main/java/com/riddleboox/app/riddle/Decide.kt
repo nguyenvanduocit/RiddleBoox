@@ -240,55 +240,56 @@ fun decideThinking(
     event: ReplyEvent?,
     page: PageRect,
     pageInFlight: List<InkStroke>,
+): Decision? = when (event) {
+    is ReplyEvent.Delta -> beginStreamingReply(event, now)
+    is ReplyEvent.Complete -> beginCompletedReply(event, now)
+    is ReplyEvent.Lookup -> reportLookup(s, event)
+    is ReplyEvent.Error -> decideError(s, now, event, page)
+    null -> retryWhenDue(s, now, pageInFlight)
+}
+
+/** Starts the pen on the first words while the rest of the reply stays open. */
+private fun beginStreamingReply(event: ReplyEvent.Delta, now: Long) = Decision(
+    state = RiddleState.Replying(nextTickAtMs = now),
+    effects = listOf(
+        Effect.BeginReply(REPLY_TOP_PX),
+        Effect.FeedReply(event.text),
+        Effect.Status("Writing a reply…"),
+    ),
+)
+
+/**
+ * Uses feed-and-flush so figure markup is interpreted by the streaming path,
+ * while the recorded turn contains only the reply's plain words.
+ */
+private fun beginCompletedReply(event: ReplyEvent.Complete, now: Long) = Decision(
+    state = RiddleState.Replying(
+        nextTickAtMs = now,
+        streamEnded = true,
+    ),
+    effects = listOf(
+        Effect.RecordTurn(event.transcript, plainText(event.text)),
+        Effect.BeginReply(REPLY_TOP_PX),
+        Effect.FeedReply(event.text),
+        Effect.FlushReply,
+        Effect.Status("Writing a reply…"),
+    ),
+)
+
+/** Keeps the exact thinking state so a lookup cannot reset retry metadata. */
+private fun reportLookup(s: RiddleState.Thinking, event: ReplyEvent.Lookup) = Decision(
+    state = s,
+    effects = listOf(
+        Effect.Note("looking up: ${event.tool}"),
+        Effect.Status(event.note.ifBlank { "Leafing through…" }),
+    ),
+)
+
+private fun retryWhenDue(
+    s: RiddleState.Thinking,
+    now: Long,
+    pageInFlight: List<InkStroke>,
 ): Decision? {
-    when (event) {
-        // The first words are in: the page clears and the pen starts, with the
-        // rest of the reply still on its way.
-        is ReplyEvent.Delta -> return Decision(
-            state = RiddleState.Replying(nextTickAtMs = now),
-            effects = listOf(
-                Effect.BeginReply(REPLY_TOP_PX),
-                Effect.FeedReply(event.text),
-                Effect.Status("Writing a reply…"),
-            ),
-        )
-
-        // A reply short enough to arrive whole before the first tick. It goes
-        // through the same feed-and-flush the streamed path uses, because it
-        // may carry a figure's markup that [Effect.WriteText] would ink as
-        // angle brackets; what is recorded is the words alone.
-        is ReplyEvent.Complete -> {
-            return Decision(
-                state = RiddleState.Replying(
-                    nextTickAtMs = now,
-                    streamEnded = true,
-                ),
-                effects = listOf(
-                    Effect.RecordTurn(event.transcript, plainText(event.text)),
-                    Effect.BeginReply(REPLY_TOP_PX),
-                    Effect.FeedReply(event.text),
-                    Effect.FlushReply,
-                    Effect.Status("Writing a reply…"),
-                ),
-            )
-        }
-
-        // Still thinking, and now with a reason to say so. Only the caption
-        // changes; the state is handed back untouched so the retry count is
-        // not reset by it.
-        is ReplyEvent.Lookup -> return Decision(
-            state = s,
-            effects = listOf(
-                Effect.Note("looking up: ${event.tool}"),
-                Effect.Status(event.note.ifBlank { "Leafing through…" }),
-            ),
-        )
-
-        is ReplyEvent.Error -> return decideError(s, now, event, page)
-
-        null -> Unit
-    }
-
     // Nothing has happened and nothing is due: the page is already blank and
     // the status line already says what it is waiting for, so this tick has
     // nothing to change.

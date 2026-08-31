@@ -233,15 +233,15 @@ class OnyxBooxNotes(
     // no other seam that exercises it without a real BOOX ContentProvider.
     internal fun exportedFiles(note: BooxNote): List<File> {
         if (!noteRoot.isDirectory) return emptyList()
-        val titleKey = searchKey(note.title)
-        if (titleKey.isBlank()) return emptyList()
+        val titleWords = searchWords(note.title)
+        if (titleWords.isBlank()) return emptyList()
         val candidates = ArrayList<File>()
         val queue = ArrayDeque<Pair<File, Int>>()
         queue.add(noteRoot to 0)
         var visited = 0
         while (queue.isNotEmpty() && visited < MAX_EXPORTED_FILES) {
             val (directory, depth) = queue.removeFirst()
-            visited = visitExportCandidates(directory, depth, titleKey, visited, queue, candidates)
+            visited = visitExportCandidates(directory, depth, titleWords, visited, queue, candidates)
         }
         return candidates.sortedWith(compareBy<File> { naturalKey(it.name) }.thenBy { it.path })
     }
@@ -251,13 +251,13 @@ class OnyxBooxNotes(
      * against the shared [MAX_EXPORTED_FILES] visit budget (files and directories
      * alike, hence the budget check runs before either branch below), matching
      * subdirectories up to depth 5 are queued for a later visit, and readable files
-     * whose relative path matches [titleKey] are appended to [candidates]. Returns
+     * whose relative path matches [titleWords] are appended to [candidates]. Returns
      * the updated visited count.
      */
     private fun visitExportCandidates(
         directory: File,
         depth: Int,
-        titleKey: String,
+        titleWords: String,
         visited: Int,
         queue: ArrayDeque<Pair<File, Int>>,
         candidates: MutableList<File>,
@@ -268,15 +268,15 @@ class OnyxBooxNotes(
             if (++count >= MAX_EXPORTED_FILES) break
             when {
                 child.isDirectory && depth < 5 -> queue.add(child to depth + 1)
-                child.isFile && child.isReadableExport() && matchesTitle(child, titleKey) -> candidates += child
+                child.isFile && child.isReadableExport() && matchesTitle(child, titleWords) -> candidates += child
             }
         }
         return count
     }
 
-    private fun matchesTitle(file: File, titleKey: String): Boolean {
-        val relativeKey = searchKey(runCatching { file.relativeTo(noteRoot).path }.getOrDefault(file.name))
-        return relativeKey.contains(titleKey)
+    private fun matchesTitle(file: File, titleWords: String): Boolean {
+        val relativeWords = searchWords(runCatching { file.relativeTo(noteRoot).path }.getOrDefault(file.name))
+        return " $relativeWords ".contains(" $titleWords ")
     }
 
     private fun readTypedShapeText(noteId: String, pageId: String): String {
@@ -341,7 +341,18 @@ class OnyxBooxNotes(
 
     private fun File.isImageFile(): Boolean = extension.lowercase(Locale.ROOT) in setOf("png", "jpg", "jpeg", "webp")
 
-    private fun searchKey(value: String): String = value.lowercase(Locale.ROOT).filter(Char::isLetterOrDigit)
+    private fun searchWords(value: String): String = buildString(value.length) {
+        var pendingSpace = false
+        for (character in value.lowercase(Locale.ROOT)) {
+            if (character.isLetterOrDigit()) {
+                if (pendingSpace && isNotEmpty()) append(' ')
+                append(character)
+                pendingSpace = false
+            } else {
+                pendingSpace = true
+            }
+        }
+    }
 
     private fun naturalKey(value: String): String = Regex("\\d+").replace(value.lowercase(Locale.ROOT)) {
         it.value.padStart(12, '0')
@@ -522,16 +533,26 @@ class BooxNotesTools(
 
     private suspend fun read(query: String, pageNumber: Int): String {
         val page = source.readPage(query, pageNumber.coerceAtLeast(1))
-        val visionText = if (page.text.isBlank()) visionReader?.readPage(page).orEmpty() else ""
+        val visionResult = if (page.text.isBlank()) {
+            runCatching { visionReader?.readPage(page).orEmpty() }
+        } else {
+            Result.success("")
+        }
+        val visionText = visionResult.getOrDefault("")
         val text = page.text.ifBlank { visionText }
         val header = "BOOX Notebook: \"${page.note.title}\" — page ${page.pageNumber}/${page.note.pageCount.coerceAtLeast(page.pageNumber)}"
         if (text.isNotBlank()) return "$header\n$text"
 
         val reason = when {
             page.imageFile != null && visionReader == null ->
-                "An exported page image exists, but no vision reader is configured for this agent."
+                "An exported page image exists, but this diary has no reply model configured to read it. " +
+                    "Setting up the model in the diary's Settings also lets handwritten pages be read."
+            visionResult.isFailure ->
+                "The exported page image could not be read by the configured reply model. " +
+                    "Check the model and connection in Settings, then try again."
             page.hasPrivatePageData ->
-                "This page contains BOOX handwritten stroke data, but no typed text or OCR result is available."
+                "This page contains BOOX handwritten stroke data, but no typed text or OCR result is available. " +
+                    "Exporting this notebook as PNG from BOOX Notebook would let the vision reader transcribe it."
             else -> "No readable text or exported page image was found for this page."
         }
         return "$header\n$reason Ask for a page number if another page is needed."

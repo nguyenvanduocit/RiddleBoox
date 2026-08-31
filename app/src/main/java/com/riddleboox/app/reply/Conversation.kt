@@ -16,6 +16,7 @@ import ai.koog.prompt.message.Message
 import ai.koog.prompt.message.MessagePart
 import ai.koog.prompt.streaming.StreamFrame
 import kotlinx.serialization.json.JsonPrimitive
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -90,6 +91,14 @@ private val TURN_PROTOCOL = """
     separator.
 """.trimIndent()
 
+private fun toolBudget(maxLookups: Int): String = """
+    You may take at most $maxLookups rounds of tool use in one turn. Request
+    independent tool calls together in the same round; several calls in one
+    round cost the same as one. When no more tools are offered, answer with
+    what you have and say plainly what remains undone. Never imply that an
+    action happened when its tool was not called successfully.
+""".trimIndent()
+
 /**
  * A recovery protocol kept in code, outside every user-editable agent prompt.
  * It is used only when the normal response omitted [TURN_SEPARATOR], so a
@@ -128,9 +137,9 @@ private val MEMORY_SENSE = """
     Use what is remembered the way you use anything else you know; do not
     read it out loud unless asked.
 
-    Remove an entry only when the writer says it is wrong or asks you to
-    forget it. Never write down a time or an id yourself — give only the fact;
-    the diary marks when and where it was learned on its own.
+    Remove an entry when it has become wrong or outdated, or when the writer
+    asks you to forget it. Never write down a time or an id yourself — give
+    only the fact; the diary marks when and where it was learned on its own.
 """.trimIndent()
 
 /**
@@ -150,7 +159,7 @@ private fun memorySense(recentMemories: String): String = if (recentMemories.isB
  * one starves the visible reply. The persona already keeps replies short —
  * this is a runaway guard only (oracle.rs:413-418).
  */
-private const val DEFAULT_MAX_TOKENS = 2000
+private const val DEFAULT_MAX_TOKENS = 8000
 
 private const val TRANSCRIPTION_MAX_TOKENS = 1200
 
@@ -168,12 +177,13 @@ private const val KEPT_MESSAGES = 24
  * to answer with what it has.
  *
  * Each round is a whole extra request with the whole conversation behind it,
- * and the writer is watching a blank page for every one of them. Three is
- * enough for the shape a real question takes — find the book, find the chapter,
- * read it — and short enough that a model that has started hunting rather than
- * answering is stopped before the pause becomes the experience.
+ * and the writer is watching a blank page for every one of them. Six covers a
+ * dependent workflow such as finding and downloading a book, opening its
+ * contents, reading it, and persisting a note, while still stopping a model
+ * that has started hunting rather than answering. Independent calls can share
+ * a round, and the protocol tells the model to batch them.
  */
-private const val MAX_LOOKUPS = 3
+private const val MAX_LOOKUPS = 6
 
 /**
  * What OpenRouter is told to file this run of the diary under.
@@ -276,6 +286,8 @@ class Conversation(
      * same way it does not re-read `systemPrompt`.
      */
     private val recentMemories: String = "",
+    /** The writer's local date, injectable so relative-date behavior is testable. */
+    private val currentDate: LocalDate = LocalDate.now(),
 ) {
 
     private var history: Prompt = freshPrompt()
@@ -307,6 +319,8 @@ class Conversation(
             listOfNotNull(
                 systemPrompt,
                 memorySense(recentMemories).takeIf { toolbox != null },
+                "The writer's current date is $currentDate.".takeIf { toolbox != null },
+                toolBudget(maxLookups).takeIf { toolbox != null },
                 TURN_PROTOCOL,
             ).joinToString("\n\n"),
         )
@@ -476,6 +490,12 @@ class Conversation(
                 // calls they do not belong to.
                 assistant { calls.forEach { toolCall(MessagePart.Tool.Call(it.id, it.name, it.content)) } }
                 found.forEach { (call, answer) -> toolResult(MessagePart.Tool.Result(call.id, call.name, answer)) }
+                if (lookups >= maxLookups) {
+                    user(
+                        "No further tool rounds remain in this turn. Answer now with what you have, " +
+                            "state plainly what remains undone, and do not claim an action succeeded unless its tool result confirmed it.",
+                    )
+                }
             }
         }
     }

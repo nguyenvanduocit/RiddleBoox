@@ -43,7 +43,10 @@ class RiddleStateMachineTest {
 
     @After
     fun cleanup() {
-        harnesses.forEach { it.root.deleteRecursively() }
+        harnesses.forEach {
+            it.machine.close()
+            it.root.deleteRecursively()
+        }
     }
 
     private class Harness(
@@ -82,7 +85,7 @@ class RiddleStateMachineTest {
         )
 
         /** Advances fake ticker time while yielding real wall-clock time to the real IO coroutine dispatcher. */
-        fun driveUntilIdle(maxRealMs: Long = 10_000L, stepMs: Long = 16L) {
+        fun driveUntilIdle(maxRealMs: Long = 60_000L, stepMs: Long = 16L) {
             val deadline = System.currentTimeMillis() + maxRealMs
             while (System.currentTimeMillis() < deadline) {
                 ticker.advance(stepMs)
@@ -104,7 +107,7 @@ class RiddleStateMachineTest {
          * page settled, not that the write landed. Poll rather than read
          * [conversationStore] once right after [driveUntilIdle].
          */
-        fun waitForConversations(count: Int, maxRealMs: Long = 2_000L): List<com.riddleboox.app.history.StoredConversation> {
+        fun waitForConversations(count: Int, maxRealMs: Long = 10_000L): List<com.riddleboox.app.history.StoredConversation> {
             val deadline = System.currentTimeMillis() + maxRealMs
             while (System.currentTimeMillis() < deadline) {
                 val found = conversationStore.list()

@@ -101,6 +101,34 @@ class BooxNotesToolsTest {
     }
 
     @Test
+    fun `vision failure becomes an actionable answer instead of failing the whole tool`() = runBlocking {
+        val image = folder.newFile("page-failure.png").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val tools = BooxNotesTools(
+            source = FakeSource(note, imageFile = image),
+            visionReader = BooxNotesVisionReader { error("offline") },
+        )
+
+        val result = tools.call(
+            "read_boox_note",
+            JsonObject(mapOf("note" to JsonPrimitive("note-1"))),
+        )
+
+        assertTrue(result.contains("BOOX Notebook: \"Kế hoạch tuần\""))
+        assertTrue(result.contains("Check the model and connection in Settings"))
+        assertTrue(!result.contains("BOOX Notebook lookup failed"))
+    }
+
+    @Test
+    fun `private handwriting answer explains how to make it readable`() = runBlocking {
+        val result = BooxNotesTools(FakeSource(note)).call(
+            "read_boox_note",
+            JsonObject(mapOf("note" to JsonPrimitive("note-1"))),
+        )
+
+        assertTrue(result.contains("Exporting this notebook as PNG"))
+    }
+
+    @Test
     fun `a note is deleted whole, row and pages`() = runBlocking {
         val source = FakeSource(note)
         val tools = BooxNotesTools(source)
@@ -242,6 +270,17 @@ class OnyxBooxNotesExportedFilesTest {
         val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
 
         assertEquals(listOf(match), result)
+    }
+
+    @Test
+    fun `a shorter notebook title does not steal another notebooks exported pages`() {
+        val root = folder.newFolder()
+        File(root, "Planning 2026").mkdirs()
+        File(root, "Planning 2026/page-1.png").writeText("x")
+
+        val result = onyxNotes(root).exportedFiles(note("Plan"))
+
+        assertTrue(result.isEmpty())
     }
 
     @Test

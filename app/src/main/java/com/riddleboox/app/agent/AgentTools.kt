@@ -46,7 +46,7 @@ class AgentManagerTools(private val store: AgentStore) : Toolbox {
         ),
         ToolDescriptor(
             name = UPDATE_AGENT,
-            description = "Update a user-created agent's name, description, capabilities, greetings, or system prompt file. Built-in agents are read-only.",
+            description = "Update a user-created agent's definition. Built-in agents are factory-managed and read-only; clone one to customize it.",
             requiredParameters = listOf(
                 ToolParameterDescriptor("agent_id", "The stable agent id.", ToolParameterType.String),
             ),
@@ -54,7 +54,7 @@ class AgentManagerTools(private val store: AgentStore) : Toolbox {
                 ToolParameterDescriptor("name", "New display name.", ToolParameterType.String),
                 ToolParameterDescriptor("description", "New purpose description.", ToolParameterType.String),
                 ToolParameterDescriptor("system_prompt", "New complete system prompt.", ToolParameterType.String),
-                ToolParameterDescriptor("tools", "Comma-separated capabilities: library, dilib, or boox_notes. Workspace, memory and drawing are every agent's by default. Agent-management remains manager-only.", ToolParameterType.String),
+                ToolParameterDescriptor("tools", "Comma-separated capabilities: library, dilib, or boox_notes. This replaces the agent's whole set, so name every capability it should keep; call list_agents first to see the current set. Workspace, memory and drawing are every agent's by default. Agent-management remains manager-only.", ToolParameterType.String),
                 ToolParameterDescriptor("greetings", "Replacement opening lines, one greeting per line, for this agent.", ToolParameterType.String),
             ),
         ),
@@ -68,7 +68,7 @@ class AgentManagerTools(private val store: AgentStore) : Toolbox {
         ),
         ToolDescriptor(
             name = READ_PROMPT,
-            description = "Read an agent's system prompt from its system.md file.",
+            description = "Read an agent's complete definition: identity, capabilities, greetings and system prompt.",
             requiredParameters = listOf(
                 ToolParameterDescriptor("agent_id", "The stable agent id.", ToolParameterType.String),
             ),
@@ -110,31 +110,43 @@ class AgentManagerTools(private val store: AgentStore) : Toolbox {
         var id = requested
         var suffix = 2
         while (store.load(id) != null) id = "$requested-${suffix++}"
+        val requestedTools = arguments.text("tools").toToolIds()
         val created = store.create(
             id = id,
             name = name,
             description = arguments.text("description"),
             systemPrompt = prompt,
-            tools = arguments.text("tools").toToolIds(),
+            tools = requestedTools,
             greetings = arguments.text("greetings").toGreetings(),
         )
-        return "Created agent ${created.id} (${created.name}); tools=${created.toolIds.joinToString(",")}; greetings=${created.greetings.size}; prompt: system.md; workspace: workspace/."
+        val dropped = requestedTools.filterNot { it in created.toolIds }
+        return buildString {
+            append("Created agent ${created.id} (${created.name}); tools=${created.toolIds.joinToString(",")}; greetings=${created.greetings.size}; prompt: system.md; workspace: workspace/.")
+            appendDroppedCapabilities(dropped)
+        }
     }
 
     private fun updateAgent(arguments: JsonObject): String {
         val id = arguments.text("agent_id")
         require(id.isNotBlank()) { "agent_id is required" }
         val current = store.load(id) ?: return "Unknown agent: $id"
-        if (current.builtin) return "Cannot update built-in agent $id; built-in agents are read-only."
-        val updated = store.update(
-            id = id,
-            name = arguments.text("name").ifBlank { null },
-            description = arguments.text("description").ifBlank { null },
-            systemPrompt = arguments.text("system_prompt").ifBlank { null },
-            tools = arguments.text("tools").takeIf { it.isNotBlank() }?.toToolIds(),
-            greetings = arguments.text("greetings").takeIf { it.isNotBlank() }?.toGreetings(),
-        )
-        return "Updated agent ${updated.id} (${updated.name}); tools=${updated.toolIds.joinToString(",")}; greetings=${updated.greetings.size}."
+        if (current.builtin) {
+            return "Cannot update built-in agent $id; built-in agents are factory-managed and read-only. Clone it to customize it."
+        }
+        val name = arguments.text("name").ifBlank { null }
+        val description = arguments.text("description").ifBlank { null }
+        val prompt = arguments.text("system_prompt").ifBlank { null }
+        val tools = arguments.text("tools").takeIf { it.isNotBlank() }?.toToolIds()
+        val greetings = arguments.text("greetings").takeIf { it.isNotBlank() }?.toGreetings()
+        if (name == null && description == null && prompt == null && tools == null && greetings == null) {
+            return "Nothing to change: name, description, system_prompt, tools and greetings were all empty."
+        }
+        val updated = store.update(id, name, description, prompt, tools, greetings)
+        val dropped = tools.orEmpty().filterNot { it in updated.toolIds }
+        return buildString {
+            append("Updated agent ${updated.id} (${updated.name}); tools=${updated.toolIds.joinToString(",")}; greetings=${updated.greetings.size}.")
+            appendDroppedCapabilities(dropped)
+        }
     }
 
     private fun deleteAgent(arguments: JsonObject): String {
@@ -148,7 +160,23 @@ class AgentManagerTools(private val store: AgentStore) : Toolbox {
     private fun readPrompt(arguments: JsonObject): String {
         val id = arguments.text("agent_id")
         val agent = store.load(id) ?: return "Unknown agent: $id"
-        return "[$id/system.md]\n${agent.systemPrompt}"
+        return buildString {
+            appendLine("id: ${agent.id}")
+            appendLine("name: ${agent.name}")
+            appendLine("description: ${agent.description}")
+            appendLine("editable: ${if (agent.builtin) "no; built-in agents are factory-managed" else "yes"}")
+            appendLine("tools: ${agent.toolIds.joinToString(",").ifBlank { "none beyond the default set" }}")
+            appendLine("greetings:")
+            agent.greetings.forEach { appendLine("  $it") }
+            appendLine("[$id/system.md]")
+            append(agent.systemPrompt)
+        }
+    }
+
+    private fun StringBuilder.appendDroppedCapabilities(dropped: Collection<String>) {
+        if (dropped.isNotEmpty()) {
+            append(" Not granted: ${dropped.joinToString(",")} — valid capabilities are library, dilib and boox_notes.")
+        }
     }
 }
 
@@ -192,7 +220,8 @@ private const val READ_SELF = "read_own_definition"
 private const val UPDATE_SELF = "update_self"
 
 /**
- * The one agent definition every agent can edit: its own.
+ * The one agent definition every agent can inspect, and only custom agents
+ * can edit: its own.
  *
  * The id is fixed at construction instead of being a tool parameter, which is
  * the whole difference between this and [AgentManagerTools]: there is no
@@ -250,7 +279,7 @@ class AgentSelfTools(private val store: AgentStore, private val ownId: String) :
             appendLine("id: ${self.id}")
             appendLine("name: ${self.name}")
             appendLine("description: ${self.description}")
-            appendLine("editable: ${if (self.builtin) "no, built-in agents are read-only" else "yes"}")
+            appendLine("editable: ${if (self.builtin) "no; built-in agents are factory-managed" else "yes"}")
             appendLine("tools: ${self.toolIds.joinToString(",").ifBlank { "none beyond the default set" }}")
             appendLine("greetings:")
             self.greetings.forEach { appendLine("  $it") }
@@ -262,7 +291,8 @@ class AgentSelfTools(private val store: AgentStore, private val ownId: String) :
     private fun updateSelf(arguments: JsonObject): String {
         val current = store.load(ownId) ?: return missing()
         if (current.builtin) {
-            return "Cannot change $ownId; built-in agents are read-only. Only agents the writer created can rewrite themselves."
+            return "Cannot rewrite $ownId; built-in agents are factory-managed and read-only. " +
+                "If the writer asked for a lasting habit or preference, keep it with remember instead."
         }
         val name = arguments.text("name").ifBlank { null }
         val description = arguments.text("description").ifBlank { null }

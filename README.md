@@ -25,9 +25,10 @@ của Claude Code. Mỗi agent có tên, mô tả, system prompt và workspace r
 └── workspace/      # artifact và memory riêng của agent
 ```
 
-Lần chạy đầu app tạo bốn agent mặc định: `chat`, `library`, `notes` và `agent-manager`.
-Chạm tên agent trên dòng đầu của trang để chọn, tạo, sửa hoặc xóa agent tùy chỉnh. Built-in
-agent có thể sửa nhưng không thể xóa để luôn còn đường khôi phục.
+Lần chạy đầu app tạo năm agent mặc định: `chat`, `library`, `notes`, `english-tutor` và
+`agent-manager`. Chạm tên agent trên dòng đầu của trang để chọn, tạo, sửa hoặc xóa agent
+tùy chỉnh. Built-in có prompt, identity và toàn bộ capability được app quản lý theo phiên bản;
+chúng không thể sửa hay xóa. Muốn tùy biến một built-in, hãy nhân bản nó thành agent riêng.
 
 Trong lúc diary đang gọi model hoặc đang viết câu trả lời ra giấy, cạnh dòng trạng thái ở đầu
 trang hiện nhãn **dừng** (chỉ hiện khi đang bận). Chạm vào nó:
@@ -46,11 +47,11 @@ câu trên một dòng trong trường `greetings`; khi mở trang mới, app ch
 của agent đang được chọn và tránh lặp lại câu vừa dùng.
 
 Mọi agent đều mang sẵn **bộ tool mặc định** — workspace và memory — được inject vô điều kiện
-trong `MainActivity.agentToolbox`, không cần khai trong `agent.json` và không tắt được. Ngoài
-bộ đó, tool được cấp theo capability của từng agent: `notes` có thêm `boox_notes`; `library`
-có thêm tool thư viện và `dilib`; chỉ `agent-manager` built-in có capability
-`agent_management`. Model chỉ nhận descriptor của capability được cấp nên các agent khác
-không biết những tool không thuộc vai trò của mình tồn tại.
+trong `MainActivity.agentToolbox`, không cần khai trong `agent.json` và không tắt được. Built-in
+còn có toàn bộ capability `library`, `dilib` và `boox_notes`; riêng `agent-manager` có thêm
+`agent_management`. Agent custom chỉ có những capability người dùng chọn trong màn hình Edit.
+Model chỉ nhận descriptor của capability được cấp nên không biết những tool ngoài vai trò của
+mình tồn tại.
 
 **Vẽ hình không phải tool** mà là giao thức in-band như `[[circle]]` và LaTeX: model đặt thẳng
 `<svg>…</svg>` vào reply tại đúng chỗ hình thuộc về (TURN_PROTOCOL trong `reply/Conversation.kt`),
@@ -67,8 +68,9 @@ nên resume một cuộc trò chuyện cũ chỉ vẽ lại phần chữ.
 
 Workspace tools an toàn gồm list, read, write, append, edit, delete, mkdir, stat, filename
 search, grep và regex search. Path traversal, absolute path, symlink thoát khỏi workspace và
-thao tác quá lớn đều bị chặn. Capability của agent có thể chỉnh từ màn hình agents hoặc nhờ
-`agent-manager`; capability `agent_management` luôn bị khóa cho built-in manager.
+thao tác quá lớn đều bị chặn. Capability của agent custom chỉnh trong màn hình Edit hoặc nhờ
+`agent-manager`; built-in luôn giữ nguyên toàn bộ capability và `agent_management` vẫn chỉ thuộc
+về built-in manager.
 
 BOOX có lợi thế: chạy Android → app là Android Activity bình thường, không cần đụng vendor engine
 (đã có sẵn `onyxsdk-pen`/`EpdController` cho stylus + refresh E-Ink).
@@ -226,8 +228,9 @@ Ba điểm thiết kế đáng nhớ:
 - **Model phải khai `LLMCapability.Tools`**, nếu không koog **âm thầm bỏ** field `tools`
   khỏi request và nhật ký sẽ không bao giờ tra gì — trông như model bướng chứ không như
   request thiếu (cùng một cái bẫy với `reasoning_effort` / `LLMCapability.Thinking`).
-- **Tối đa 3 vòng tra cứu một lượt** (`MAX_LOOKUPS`). Hết vòng thì tool đơn giản là không
-  được đưa vào request nữa, nên model buộc phải trả lời — không cần lệnh dừng.
+- **Tối đa 6 vòng tra cứu một lượt** (`MAX_LOOKUPS`). System protocol nói rõ ngân sách và
+  yêu cầu model batch các call độc lập trong cùng một vòng. Ở vòng cuối model nhận cảnh báo
+  phải nói rõ phần chưa làm; sau đó tool không được đưa vào request nữa nên lượt luôn dừng.
 - **Kết quả tra cứu không được nhớ.** Một lượt xong thì nhật ký chỉ giữ lại chữ trên trang
   và câu trả lời của chính nó, y như khi không có tool. Một chương sách đọc để trả lời một
   câu mà nằm lại trong history thì mọi lượt sau của buổi tối đều phải trả tiền cho nó.

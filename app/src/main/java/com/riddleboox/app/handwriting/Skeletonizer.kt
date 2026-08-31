@@ -20,61 +20,84 @@ object Skeletonizer {
 
     /** Thins [mask] in place until no further pixel can be removed. */
     fun thin(mask: GlyphMask) {
-        val w = mask.width
-        val h = mask.height
         val toClear = ArrayList<Int>()
         while (true) {
-            var changed = false
-            for (phase in 0..1) {
-                toClear.clear()
-                for (y in 1 until h - 1) {
-                    for (x in 1 until w - 1) {
-                        if (!mask[x, y]) continue
-                        val n = mask[x, y - 1]      // p2
-                        val ne = mask[x + 1, y - 1] // p3
-                        val e = mask[x + 1, y]      // p4
-                        val se = mask[x + 1, y + 1] // p5
-                        val s = mask[x, y + 1]      // p6
-                        val sw = mask[x - 1, y + 1] // p7
-                        val we = mask[x - 1, y]     // p8
-                        val nw = mask[x - 1, y - 1] // p9
-
-                        // Connectivity: how many separate runs of ink surround
-                        // the pixel. Deleting is only safe when there is one,
-                        // i.e. the pixel is not a bridge between two arms.
-                        val crossings = count(!n && (ne || e)) +
-                            count(!e && (se || s)) +
-                            count(!s && (sw || we)) +
-                            count(!we && (nw || n))
-                        if (crossings != 1) continue
-
-                        // Ink around the pixel, counted in opposite pairings.
-                        // Below 2 is an endpoint the pen still needs; above 3
-                        // is interior ink with more eroding to do first.
-                        val paired = minOf(
-                            count(nw || n) + count(ne || e) + count(se || s) + count(sw || we),
-                            count(n || ne) + count(e || se) + count(s || sw) + count(we || nw),
-                        )
-                        if (paired < 2 || paired > 3) continue
-
-                        // Each phase erodes from one side, so the skeleton
-                        // settles on the middle instead of drifting.
-                        val holdsThisPhase = if (phase == 0) {
-                            (s || sw || !nw) && we
-                        } else {
-                            (n || ne || !se) && e
-                        }
-                        if (!holdsThisPhase) toClear.add(y * w + x)
-                    }
-                }
-                if (toClear.isNotEmpty()) {
-                    changed = true
-                    for (i in toClear) mask.bits[i] = false
-                }
-            }
-            if (!changed) return
+            val changedInFirstPhase = erodePhase(mask, Phase.FIRST, toClear)
+            val changedInSecondPhase = erodePhase(mask, Phase.SECOND, toClear)
+            if (!changedInFirstPhase && !changedInSecondPhase) return
         }
     }
 
+    private fun erodePhase(mask: GlyphMask, phase: Phase, toClear: MutableList<Int>): Boolean {
+        toClear.clear()
+        for (y in 1 until mask.height - 1) {
+            for (x in 1 until mask.width - 1) {
+                if (!mask[x, y]) continue
+                if (!canRemove(mask, x, y, phase)) continue
+                toClear.add(y * mask.width + x)
+            }
+        }
+        for (index in toClear) mask.bits[index] = false
+        return toClear.isNotEmpty()
+    }
+
+    private fun canRemove(mask: GlyphMask, x: Int, y: Int, phase: Phase): Boolean {
+        val north = mask[x, y - 1]
+        val northEast = mask[x + 1, y - 1]
+        val east = mask[x + 1, y]
+        val southEast = mask[x + 1, y + 1]
+        val south = mask[x, y + 1]
+        val southWest = mask[x - 1, y + 1]
+        val west = mask[x - 1, y]
+        val northWest = mask[x - 1, y - 1]
+
+        val crossings = backgroundToInkTransition(north, northEast, east) +
+            backgroundToInkTransition(east, southEast, south) +
+            backgroundToInkTransition(south, southWest, west) +
+            backgroundToInkTransition(west, northWest, north)
+        // One surrounding ink run means this pixel is not a bridge between arms.
+        if (crossings != 1) return false
+
+        val paired = minOf(
+            pairOccupancy(northWest, north) + pairOccupancy(northEast, east) +
+                pairOccupancy(southEast, south) + pairOccupancy(southWest, west),
+            pairOccupancy(north, northEast) + pairOccupancy(east, southEast) +
+                pairOccupancy(south, southWest) + pairOccupancy(west, northWest),
+        )
+        // Values below 2 are endpoints; values above 3 are interior ink.
+        if (paired !in 2..3) return false
+
+        // Alternating the held side keeps erosion centered instead of drifting.
+        val heldInPhase = when (phase) {
+            Phase.FIRST -> heldInFirstPhase(south, southWest, northWest, west)
+            Phase.SECOND -> heldInSecondPhase(north, northEast, southEast, east)
+        }
+        return !heldInPhase
+    }
+
+    private fun backgroundToInkTransition(
+        previous: Boolean,
+        next: Boolean,
+        afterNext: Boolean,
+    ): Int = count(!previous && (next || afterNext))
+
+    private fun pairOccupancy(first: Boolean, second: Boolean): Int = count(first || second)
+
+    private fun heldInFirstPhase(
+        south: Boolean,
+        southWest: Boolean,
+        northWest: Boolean,
+        west: Boolean,
+    ): Boolean = (south || southWest || !northWest) && west
+
+    private fun heldInSecondPhase(
+        north: Boolean,
+        northEast: Boolean,
+        southEast: Boolean,
+        east: Boolean,
+    ): Boolean = (north || northEast || !southEast) && east
+
     private fun count(condition: Boolean): Int = if (condition) 1 else 0
+
+    private enum class Phase { FIRST, SECOND }
 }

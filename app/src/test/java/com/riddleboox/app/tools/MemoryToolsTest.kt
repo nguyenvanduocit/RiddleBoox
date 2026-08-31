@@ -55,6 +55,19 @@ class MemoryToolsTest {
     }
 
     @Test
+    fun `recall matches separated words without requiring accents`() {
+        val memory = tools()
+        ask("remember", memory, "content" to "Con gái tên Bi; sinh nhật vào tháng mười.")
+        ask("remember", memory, "content" to "Đang đọc truyện trinh thám.")
+
+        val recalled = ask("recall_memories", memory, "query" to "con gai sinh nhat")
+
+        assertTrue(recalled.startsWith("1 of 1 remembered things"))
+        assertTrue(recalled.contains("Con gái tên Bi"))
+        assertTrue(!recalled.contains("trinh thám"))
+    }
+
+    @Test
     fun `forgetting by full id removes exactly that entry`() {
         val memory = tools()
         val id = ask("remember", memory, "content" to "Sẽ xóa cái này.")

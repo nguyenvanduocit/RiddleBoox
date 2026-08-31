@@ -21,6 +21,8 @@ import com.riddleboox.app.agent.AgentDefinition
 import com.riddleboox.app.agent.AgentSelectionStore
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.agent.toPlainText
+import com.riddleboox.app.library.Book
+import com.riddleboox.app.library.OnyxLibrary
 import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
@@ -54,6 +56,7 @@ class AgentsActivity : Activity() {
 
     private fun render() {
         column.removeAllViews()
+        column.addView(action("open a BOOX book") { pickBook() })
         val selected = selection.read()
         for (agent in store.list()) {
             val title = TextView(this).apply {
@@ -106,8 +109,61 @@ class AgentsActivity : Activity() {
 
     private fun select(agent: AgentDefinition) {
         selection.write(agent.id)
-        setResult(RESULT_OK)
+        setResult(RESULT_OK, Intent().putExtra(EXTRA_SELECTED_AGENT_ID, agent.id))
         finish()
+    }
+
+    /** Reads NeoReader's shelf away from the UI thread, then lets the writer choose one entry. */
+    private fun pickBook() {
+        val waiting = AlertDialog.Builder(this)
+            .setMessage("opening your BOOX library…")
+            .setNegativeButton("cancel", null)
+            .show()
+        Thread {
+            val result = runCatching { OnyxLibrary(contentResolver).books() }
+            runOnUiThread {
+                // A dismissed wait dialog is the writer changing their mind;
+                // a late provider answer must not reopen a dead Activity.
+                if (isFinishing || isDestroyed || !waiting.isShowing) return@runOnUiThread
+                waiting.dismiss()
+                result.getOrNull()?.let(::showBookPicker) ?: showBookLoadError()
+            }
+        }.apply { isDaemon = true; start() }
+    }
+
+    private fun showBookPicker(books: List<Book>) {
+        if (books.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setMessage("No books were found in your BOOX library.")
+                .setPositiveButton("ok", null)
+                .show()
+            return
+        }
+        val labels = books.map(::bookLabel).toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("open a BOOX book")
+            .setSingleChoiceItems(labels, -1) { dialog, which ->
+                dialog.dismiss()
+                // This starts a separate, local session. It deliberately does
+                // not call select(), so the user's normal selected agent stays put.
+                startActivity(MainActivity.intent(this, books[which].id))
+                finish()
+            }
+            .setNegativeButton("cancel", null)
+            .show()
+    }
+
+    private fun bookLabel(book: Book): String = buildString {
+        append(book.title)
+        if (book.authors.isNotBlank()) append("\n").append(book.authors)
+        if (book.page > 0 && book.pages > 0) append("\npage ${book.page} of ${book.pages}")
+    }
+
+    private fun showBookLoadError() {
+        AlertDialog.Builder(this)
+            .setMessage("Couldn't open the BOOX library. Make sure NeoReader is available, then try again.")
+            .setPositiveButton("ok", null)
+            .show()
     }
 
     /**
@@ -315,6 +371,9 @@ class AgentsActivity : Activity() {
     }
 
     companion object {
+        /** Marks the one action that changed the global selected agent. */
+        const val EXTRA_SELECTED_AGENT_ID = "com.riddleboox.app.SELECTED_AGENT_ID"
+
         private data class ToolOption(val id: String, val label: String)
 
         private val TOOL_OPTIONS = listOf(

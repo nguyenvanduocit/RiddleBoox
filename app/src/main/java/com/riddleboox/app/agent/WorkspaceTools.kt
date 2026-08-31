@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.io.File
+import java.time.Instant
 import java.util.ArrayDeque
 import java.util.regex.Pattern
 
@@ -48,7 +49,7 @@ class WorkspaceTools(workspace: File) : Toolbox {
             requiredParameters = emptyList(),
             optionalParameters = listOf(
                 ToolParameterDescriptor("path", "Relative directory path; empty means workspace root.", ToolParameterType.String),
-                ToolParameterDescriptor("depth", "Directory depth to show, maximum 5.", ToolParameterType.Integer),
+                ToolParameterDescriptor("depth", "Directory depth to show; default 2, maximum 5.", ToolParameterType.Integer),
             ),
         ),
         ToolDescriptor(
@@ -192,6 +193,7 @@ class WorkspaceTools(workspace: File) : Toolbox {
         val depth = requestedDepth.coerceIn(0, 5)
         val lines = ArrayList<String>()
         val queue = ArrayDeque<Pair<File, Int>>()
+        var truncated = false
         queue.add(directory to 0)
         while (queue.isNotEmpty() && lines.size < MAX_RESULTS) {
             val (current, currentDepth) = queue.removeFirst()
@@ -200,12 +202,19 @@ class WorkspaceTools(workspace: File) : Toolbox {
                 ?.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name })
                 ?: continue
             for (child in children) {
-                if (lines.size >= MAX_RESULTS) break
+                if (lines.size >= MAX_RESULTS) {
+                    truncated = true
+                    break
+                }
                 val relative = child.relativeTo(root).path.ifBlank { "." }
                 val suffix = if (child.isDirectory) "/" else " (${child.length()} bytes)"
                 lines += relative + suffix
                 if (child.isDirectory && currentDepth < depth) queue.add(child to currentDepth + 1)
             }
+        }
+        if (queue.isNotEmpty()) truncated = true
+        if (truncated) {
+            lines += "[cut at $MAX_RESULTS entries; call workspace_list on a subdirectory to see more]"
         }
         return if (lines.isEmpty()) "Workspace is empty at ${path.ifBlank { "." }}." else lines.joinToString("\n")
     }
@@ -340,7 +349,7 @@ class WorkspaceTools(workspace: File) : Toolbox {
             append(file.relativeTo(root).path.ifBlank { "." })
             append(if (file.isDirectory) " directory" else " file")
             append(", ").append(file.length()).append(" bytes")
-            if (file.isFile) append(", modified ").append(file.lastModified())
+            if (file.isFile) append(", modified ").append(Instant.ofEpochMilli(file.lastModified()))
         }
     }
 

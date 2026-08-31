@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
 
 /**
  * The turn loop when the diary can look something up.
@@ -23,13 +24,14 @@ class ConversationToolsTest {
     private val page = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)
     private val model = replyModel("openai/gpt-5.6-luna")
 
-    private fun conversation(server: FakeChatServer, toolbox: Toolbox?, maxLookups: Int = 3, recentMemories: String = "") =
+    private fun conversation(server: FakeChatServer, toolbox: Toolbox?, maxLookups: Int = 6, recentMemories: String = "") =
         Conversation(
             client = replyClient(server.baseUrl, "sk-test"),
             model = model,
             toolbox = toolbox,
             maxLookups = maxLookups,
             recentMemories = recentMemories,
+            currentDate = LocalDate.of(2026, 8, 31),
         )
 
     @Test
@@ -42,6 +44,9 @@ class ConversationToolsTest {
             assertTrue("koog phải gửi tools", body.contains("\"tools\":[{"))
             assertTrue(body.contains("search_library"))
             assertTrue("mô tả tham số phải đi kèm", body.contains("Words from a title"))
+            assertTrue(body.contains("at most 6 rounds of tool use"))
+            assertTrue(body.contains("writer's current date is 2026-08-31"))
+            assertTrue(body.contains("\"max_completion_tokens\":8000"))
         }
     }
 
@@ -62,6 +67,7 @@ class ConversationToolsTest {
             // declaring the capability changes nothing for a diary without one.
             assertTrue(body.contains("\"tools\":[]"))
             assertFalse(body.contains("worth remembering past this evening"))
+            assertFalse(body.contains("rounds of tool use"))
         }
     }
 
@@ -176,6 +182,7 @@ class ConversationToolsTest {
             server.takeRequest()
             val third = server.takeRequest().body
             assertTrue("lượt cuối không được mời tra cứu nữa", third.contains("\"tools\":[]"))
+            assertTrue(third.contains("No further tool rounds remain in this turn"))
         }
     }
 

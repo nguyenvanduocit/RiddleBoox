@@ -37,6 +37,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlinx.coroutines.SupervisorJob
@@ -315,6 +316,17 @@ class RiddleStateMachine(
         val wasInFlight = replyJob?.isActive == true
         abandonReply()
         if (wasInFlight) replyEvents.add(ReplyEvent.Error("interrupted"))
+    }
+
+    /**
+     * Permanently release the request and persistence workers when the owner
+     * is being destroyed. [stop] intentionally keeps both workers reusable for
+     * temporary Activity pauses; this terminal lifecycle boundary does not.
+     */
+    fun close() {
+        stop()
+        replyScope.cancel()
+        diskWriter.shutdownNow()
     }
 
     /**
@@ -1047,26 +1059,36 @@ class RiddleStateMachine(
      */
     private fun takeArrivingWords(s: RiddleState.Replying): RiddleState.Replying {
         while (true) {
-            when (val event = replyEvents.poll()) {
-                is ReplyEvent.Delta -> feedReply(event.text)
-                // A lookup after the pen has started: nothing to write, just
-                // the model reaching for a tool mid-reply.
-                is ReplyEvent.Lookup -> Log.i(TAG, "looking up mid-reply: ${event.tool}")
-                is ReplyEvent.Complete -> {
-                    flushPendingText()
-                    persistTurn(event.transcript, plainText(event.text))
-                    return s.copy(streamEnded = true)
-                }
-                is ReplyEvent.Error -> {
-                    Log.w(TAG, "reply cut short mid-writing: ${event.message}")
-                    flushPendingText()
-                    persistCutShortTurn()
-                    return s.copy(streamEnded = true)
-                }
-                null -> return s
-            }
+            val event = replyEvents.poll() ?: return s
+            val streamEnded = consumeReplyEvent(event)
+            if (streamEnded) return s.copy(streamEnded = true)
         }
     }
+
+    private fun consumeReplyEvent(event: ReplyEvent): Boolean =
+        when (event) {
+            is ReplyEvent.Delta -> {
+                feedReply(event.text)
+                false
+            }
+            // A lookup after the pen has started: nothing to write, just
+            // the model reaching for a tool mid-reply.
+            is ReplyEvent.Lookup -> {
+                Log.i(TAG, "looking up mid-reply: ${event.tool}")
+                false
+            }
+            is ReplyEvent.Complete -> {
+                flushPendingText()
+                persistTurn(event.transcript, plainText(event.text))
+                true
+            }
+            is ReplyEvent.Error -> {
+                Log.w(TAG, "reply cut short mid-writing: ${event.message}")
+                flushPendingText()
+                persistCutShortTurn()
+                true
+            }
+        }
 
     /**
      * Whatever was held back was never a mark; it is words, and it is the

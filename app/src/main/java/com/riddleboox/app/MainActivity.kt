@@ -219,9 +219,10 @@ class MainActivity : Activity() {
         agentStore = AgentStore(this)
         agentStore.ensureDefaults()
         val selectedId = AgentSelectionStore(this).read()
-        selectedAgent = agentStore.load(selectedId) ?: checkNotNull(agentStore.load("chat")) {
+        val defaultAgent = agentStore.load(selectedId) ?: checkNotNull(agentStore.load("chat")) {
             "ensureDefaults() just created \"chat\" but its manifest is unreadable"
         }
+        selectedAgent = resolveLaunchAgent(defaultAgent)
 
         penSurface = SurfaceView(this)
         regionView = RegionView(this)
@@ -536,6 +537,36 @@ class MainActivity : Activity() {
     }
 
     /**
+     * Keeps a book entry-point local to this Activity run. The saved agent
+     * choice remains the normal fallback and is never changed by a book
+     * request.
+     */
+    private fun resolveLaunchAgent(defaultAgent: AgentDefinition): AgentDefinition {
+        if (!intent.hasExtra(EXTRA_BOOK_ID)) return defaultAgent
+        val bookId = intent.getStringExtra(EXTRA_BOOK_ID)
+        if (bookId.isNullOrBlank()) return requestedBookCouldNotBeOpened(defaultAgent)
+
+        val book = runCatching {
+            OnyxLibrary(contentResolver).books().firstOrNull { it.id == bookId }
+        }.onFailure {
+            Log.w(TAG, "requested book lookup failed", it)
+        }.getOrNull() ?: return requestedBookCouldNotBeOpened(defaultAgent)
+
+        return runCatching { agentStore.resolveOrCreateBookAgent(book) }
+            .onFailure { Log.w(TAG, "requested book agent could not be opened", it) }
+            .getOrElse { requestedBookCouldNotBeOpened(defaultAgent) }
+    }
+
+    private fun requestedBookCouldNotBeOpened(defaultAgent: AgentDefinition): AgentDefinition {
+        Toast.makeText(
+            this,
+            "The requested book could not be opened. Using your selected agent instead.",
+            Toast.LENGTH_LONG,
+        ).show()
+        return defaultAgent
+    }
+
+    /**
      * The send label belongs to [SendMode.Manual] alone. Under [SendMode.Auto]
      * the pause already hands the page over, so a button beside it would be a
      * second way to do the same thing taking room on a line the ink shares.
@@ -549,7 +580,14 @@ class MainActivity : Activity() {
         // changed key, since the conversation is built once in onCreate;
         // cancelling or backing out leaves the current page untouched.
         if (requestCode == REQUEST_SETTINGS && resultCode == RESULT_OK) recreate()
-        if (requestCode == REQUEST_AGENTS && resultCode == RESULT_OK) recreate()
+        if (requestCode == REQUEST_AGENTS && resultCode == RESULT_OK) {
+            // A book-id launch is one session only. If the writer explicitly
+            // chooses an agent, let that saved choice win after recreation.
+            if (data?.hasExtra(AgentsActivity.EXTRA_SELECTED_AGENT_ID) == true) {
+                intent.removeExtra(EXTRA_BOOK_ID)
+            }
+            recreate()
+        }
         if (requestCode == REQUEST_HISTORY && resultCode == RESULT_OK) {
             pendingResumeId = data?.getStringExtra(HistoryActivity.EXTRA_RESUME_ID)
         }
@@ -699,7 +737,8 @@ class MainActivity : Activity() {
 
     /**
      * Every agent's toolbox: a default set carried by all of them, plus the
-     * capabilities the selected agent's manifest opts into.
+     * selected capabilities. Built-ins always use their factory capability
+     * set; custom agents use the choices stored in their manifest.
      *
      * The defaults — its own workspace files and its own long-term memory —
      * are senses of the diary itself, not capabilities: they are added here
@@ -710,25 +749,33 @@ class MainActivity : Activity() {
      * [com.riddleboox.app.reply.Conversation]'s turn protocol).
      */
     private fun agentToolbox(replySettings: ReplySettings?): Toolbox {
+        // Built-in capabilities are factory-owned. Keep this guard here so an
+        // old or hand-edited manifest cannot narrow the tools exposed at runtime.
+        val capabilities = if (selectedAgent.builtin) {
+            AgentCapability.defaultsForBuiltin(selectedAgent.id)
+        } else {
+            selectedAgent.toolIds
+        }
         val boxes = buildList {
             add(WorkspaceTools(selectedAgent.workspace))
             // A fresh id per toolbox build, not per turn: this is rebuilt
             // exactly when a new evening starts (app open, agent switch),
             // the same boundary RiddleStateMachine.conversationId uses.
             add(MemoryTools(selectedAgent.workspace, conversationId = UUID.randomUUID().toString()))
-            // Every agent may rewrite its own definition, so this is part of
-            // the default set rather than a capability. The id is bound here
-            // and never passed as an argument: an agent reaches itself only.
+            // Every agent may inspect its own definition, while only custom
+            // agents may rewrite it. This is part of the default set rather
+            // than a capability. The id is bound here and never passed as an
+            // argument: an agent reaches itself only.
             // Whatever it writes is read back at the next toolbox build, which
             // is why the tool's answers promise "next time you are opened".
             add(AgentSelfTools(agentStore, selectedAgent.id))
-            if (AgentCapability.LIBRARY in selectedAgent.toolIds) {
+            if (AgentCapability.LIBRARY in capabilities) {
                 add(diaryTools())
             }
-            if (AgentCapability.DILIB in selectedAgent.toolIds) {
+            if (AgentCapability.DILIB in capabilities) {
                 add(DilibTools(this@MainActivity))
             }
-            if (AgentCapability.BOOX_NOTES in selectedAgent.toolIds) {
+            if (AgentCapability.BOOX_NOTES in capabilities) {
                 val visionReader = replySettings?.let {
                     OpenAiBooxNotesVisionReader(
                         client = replyClient(it.baseUrl, it.apiKey),
@@ -749,13 +796,13 @@ class MainActivity : Activity() {
             // Neither capability alone is enough: this tool reads both the
             // shelf and Notebook in one call, so it only appears once an
             // agent can see both on their own.
-            if (AgentCapability.LIBRARY in selectedAgent.toolIds && AgentCapability.BOOX_NOTES in selectedAgent.toolIds) {
+            if (AgentCapability.LIBRARY in capabilities && AgentCapability.BOOX_NOTES in capabilities) {
                 add(BooxStateTools(OnyxLibrary(contentResolver), OnyxBooxNotes(contentResolver)))
             }
             // This check is intentionally stricter than the manifest alone:
             // no custom agent can gain awareness of the agent-management API.
             if (selectedAgent.builtin && selectedAgent.id == "agent-manager" &&
-                AgentCapability.AGENT_MANAGEMENT in selectedAgent.toolIds
+                AgentCapability.AGENT_MANAGEMENT in capabilities
             ) {
                 add(AgentManagerTools(agentStore))
             }
@@ -895,10 +942,18 @@ class MainActivity : Activity() {
         penSurface.removeCallbacks(attachRetry)
         inkCapture.detach()
         attached = false
+        if (::stateMachine.isInitialized) stateMachine.close()
         super.onDestroy()
     }
 
     companion object {
+        /** Exact NeoReader [Book.id] supplied by a trusted, explicit caller. */
+        const val EXTRA_BOOK_ID = "com.riddleboox.app.MAIN_BOOK_ID"
+
+        /** Opens a session with the existing-or-new normal agent for [bookId]. */
+        fun intent(context: Context, bookId: String): Intent =
+            Intent(context, MainActivity::class.java).putExtra(EXTRA_BOOK_ID, bookId)
+
         private const val REQUEST_SETTINGS = 1
         private const val REQUEST_HISTORY = 2
         private const val REQUEST_AGENTS = 3
