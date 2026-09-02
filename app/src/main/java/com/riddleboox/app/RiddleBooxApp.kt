@@ -1,21 +1,13 @@
 package com.riddleboox.app
 
 import android.app.Application
-import android.os.Build
-import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 /**
- * The Onyx pen SDK reaches hidden APIs on BOOX firmware; both Inka and the
- * official OnyxAndroidDemo exempt hidden API access before touching the SDK,
- * otherwise raw pen input never reaches TouchHelper.
+ * The Onyx pen SDK reflects into hidden APIs on BOOX firmware. Access to them
+ * comes from the required one-time device setup (`adb shell settings put
+ * global hidden_api_policy 1` — see "Thiết lập máy BOOX" in README.md): with
+ * the default policy ART denies even `VMRuntime.setHiddenApiExemptions`, so no
+ * in-app exemption can open the digitizer, and with policy 1 enforcement is
+ * off system-wide, so none is needed.
  */
-class RiddleBooxApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            runCatching {
-                HiddenApiBypass.addHiddenApiExemptions("")
-            }
-        }
-    }
-}
+class RiddleBooxApp : Application()

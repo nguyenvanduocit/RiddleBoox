@@ -130,13 +130,13 @@ khi đổi thông điệp, cập nhật đồng thời `stages` và các page mo
 
 ## Thiết lập máy BOOX (bắt buộc, 1 lần)
 
-Onyx SDK (`onyxsdk-pen`) cần `HiddenApiBypass.addHiddenApiExemptions("")` (gọi trong
-`RiddleBooxApp.onCreate()`) để reflect vào `Device.getBoardPlatform()` và mở kênh
-digitizer thật. Trên chính sách hidden-API mặc định của máy, lệnh này bị ART từ chối
-(`VMRuntime.setHiddenApiExemptions ... blacklist, denied`) → `ReflectUtil` crash âm thầm
-(nuốt bởi `runCatching`) → `TouchHelper.openRawDrawing()` "thành công" giả nhưng
-`onBeginRawDrawing` không bao giờ fire, tức viết bút không ra mực. Trước khi cài/chạy
-app lần đầu trên một máy BOOX mới, chạy một lần:
+Onyx SDK (`onyxsdk-pen`) reflect vào hidden API (`Device.getBoardPlatform()`) để mở
+kênh digitizer thật. Trên chính sách hidden-API mặc định của máy, ART chặn các
+reflection đó — kể cả `VMRuntime.setHiddenApiExemptions`, nên không một thư viện bypass
+in-app nào mở được (Google Play cũng từ chối bản build chứa API bypass SDK từ đợt
+targetSdk 36). Hệ quả nếu thiếu setting: `TouchHelper.openRawDrawing()` "thành công"
+giả nhưng `onBeginRawDrawing` không bao giờ fire, tức viết bút không ra mực. Trước khi
+cài/chạy app lần đầu trên một máy BOOX mới, chạy một lần:
 
 ```
 adb shell settings put global hidden_api_policy 1
