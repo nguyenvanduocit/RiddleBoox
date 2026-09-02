@@ -302,3 +302,12 @@ shapes, both in the harness's real-time waits, and neither reproduces solo.
 If a CI or a busy machine hits one, re-run the single test before suspecting
 the change in flight; a real fix would be scaling `driveUntilIdle`'s deadline
 with load or replacing wall-clock waits with virtual time.
+
+**Recurred 2026-09-02 (~10:31 and ~11:10-11:12), third sibling.** `a demo
+write lands below the standing reply instead of overlapping it` failed with
+`did not settle back to Listening within 60000ms real time (last status:
+Writing a reply…)` — even the 60s deadline expired, twice while the daemon
+was recompiling the whole app for the AGP 8.10.1 / SDK 36 toolchain switch
+and once right after. Isolated: 5/5 green in ~4s per class run; next warm
+full run: 600/600 green. Same wall-clock shape as above, now seen stuck in
+the writing phase as well.
