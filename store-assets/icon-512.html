@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 512px; height: 512px;
+    background: #111310;
+    overflow: hidden;
+    position: relative;
+  }
+  /* Adaptive icon: canvas 108dp, Play icon hiển thị vùng giữa 72dp.
+     432px foreground scale lên 512 * 108/72 = 768px, căn giữa. */
+  img {
+    position: absolute;
+    width: 768px; height: 768px;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+  }
+</style>
+</head>
+<body><img src="../app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png"></body>
+</html>
