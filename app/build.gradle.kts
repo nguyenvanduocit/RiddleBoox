@@ -34,12 +34,13 @@ if (hasFirebaseConfig) {
 
 android {
     namespace = "com.riddleboox.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.riddleboox.app"
         minSdk = 29
-        targetSdk = 35
+        // Google Play yêu cầu targetSdk 36 cho bản phát hành mới từ 31/8/2026.
+        targetSdk = 36
         versionCode = 5
         versionName = "0.4.1"
 
