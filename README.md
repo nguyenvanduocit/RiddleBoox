@@ -107,10 +107,9 @@ Landing page không dùng build tool; Cloudflare nhận nguyên thư mục `page
 section dùng `DancingScript.ttf` của app để chữ ví dụ luôn rõ và có cùng giọng điệu; các ảnh
 `page-*.png` chỉ là sample nét viết thô, không phải dữ liệu runtime của Android app.
 
-Landing page đã có Android download CTA và Android robot icon ở header, khu vực download và CTA
-cuối trang. Vì APK/Play Store link chưa được chốt, các nút hiện hiển thị trạng thái `APK / Play
-link coming soon`. Khi có link, chỉ cần gán URL vào `androidDownloadUrl` ở đầu `pages/script.js`;
-tất cả các nút sẽ tự chuyển sang cùng một đích download.
+Landing page có Android download CTA và Android robot icon ở header, khu vực download và CTA
+cuối trang. Mọi nút dùng chung một đích: `androidDownloadUrl` ở đầu `pages/script.js`, trỏ tới
+listing Google Play (`https://play.google.com/store/apps/details?id=com.riddleboox.app`).
 
 Thông điệp cốt lõi của landing page: RiddleBoox không chỉ là một ô chat trên BOOX. Đây là một
 người bạn AI lớn lên cùng những gì người dùng viết — có thể là người thầy, người đồng hành, người

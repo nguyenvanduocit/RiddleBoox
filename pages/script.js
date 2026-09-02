@@ -1,5 +1,5 @@
 const androidDownloadUrl =
-  'https://github.com/nguyenvanduocit/RiddleBoox/releases/latest';
+  'https://play.google.com/store/apps/details?id=com.riddleboox.app';
 
 document.querySelectorAll('[data-android-download]').forEach((link) => {
   if (!androidDownloadUrl) return;

@@ -17,7 +17,7 @@ name, domain, directory layout, or DNS constraints.
 - Cloudflare Pages project: `riddleboox`
 - Production alias: `https://riddleboox.pages.dev`
 - Custom hostname: `https://riddleboox.aiocean.io` (DNS is case-insensitive; lowercase is equivalent)
-- Android CTA: set `androidDownloadUrl` in `pages/script.js` when the APK or Play Store URL is ready
+- Android CTA: `androidDownloadUrl` in `pages/script.js` — every download button shares this one target, the Google Play listing (`https://play.google.com/store/apps/details?id=com.riddleboox.app`)
 
 ## Domain inventory
 
