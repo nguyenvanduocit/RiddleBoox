@@ -25,6 +25,17 @@ data class Book(
 }
 
 /**
+ * The line under a title on the shelf: who wrote it and where the reader has
+ * got to, joined by the same middle dot the rest of the app's captions use.
+ * Either half is left out when the entry does not know it — a progress with
+ * no total is a page number without meaning, so it is not shown.
+ */
+fun Book.shelfLine(): String = listOfNotNull(
+    authors.takeIf { it.isNotBlank() },
+    "page $page of $pages".takeIf { page > 0 && pages > 0 },
+).joinToString(" · ")
+
+/**
  * One passage the reader marked, and whatever they wrote beside it.
  *
  * [id] is the reader app's own id for the mark, carried so a single passage

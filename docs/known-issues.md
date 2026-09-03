@@ -311,3 +311,16 @@ was recompiling the whole app for the AGP 8.10.1 / SDK 36 toolchain switch
 and once right after. Isolated: 5/5 green in ~4s per class run; next warm
 full run: 600/600 green. Same wall-clock shape as above, now seen stuck in
 the writing phase as well.
+
+**Recurred 2026-09-02 (~18:20), same test, fourth time.** Same `a demo write
+lands below the standing reply` test, same 60s deadline, `last status: reading
+the page again…` this time — the run was `assembleDebug testDebugUnitTest`
+together in one invocation, right after the daemon had compiled a new Activity.
+Isolated re-run: 14/14 green. Nothing in the change in flight touched the
+state machine.
+
+**Recurred 2026-09-02 (~21:53), same test, fifth time.** Same test, same 60s
+deadline, `last status: reading the page again…` — a full `testDebugUnitTest`
+run (613 tests) while a multi-agent copy-writing workflow was loading the
+machine. Isolated re-run: green. The change in flight touched only the
+`onboarding` package, `WelcomeOverlay`, and the intro block of `MainActivity`.

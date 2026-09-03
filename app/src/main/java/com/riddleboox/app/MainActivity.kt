@@ -24,6 +24,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.doOnPreDraw
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.riddleboox.app.agent.AgentDefinition
@@ -46,6 +47,7 @@ import com.riddleboox.app.ink.InkStroke
 import com.riddleboox.app.ink.PageArchive
 import com.riddleboox.app.ink.StrokeStore
 import com.riddleboox.app.riddle.HandlerTicker
+import com.riddleboox.app.riddle.PageRect
 import com.riddleboox.app.riddle.PendingTurnMarker
 import com.riddleboox.app.riddle.RiddleStateMachine
 import com.riddleboox.app.riddle.idleStatus
@@ -442,7 +444,25 @@ class MainActivity : Activity() {
             ))
             offlineBanner = banner
             offlineWatcher = OfflineWatcher(this) { offline ->
-                banner.visibility = if (offline) View.VISIBLE else View.GONE
+                // While the pen is open, Onyx raw drawing holds the panel
+                // ("the screen will not refresh" — docs/onyx-sdk-api-reference.md),
+                // so a view coming or going in the framework is not enough on
+                // its own: the strip's rows have to be asked for by name, the
+                // way every page change is. GU settles the block without a
+                // flash. Startup is the exception — surfaceChanged is about
+                // to clear the whole panel with this frame in it.
+                val repaintStrip = !surfaceNeedsFullRefresh
+                if (offline) {
+                    banner.visibility = View.VISIBLE
+                    // No rows to name until the layout pass gives it a height.
+                    if (repaintStrip) banner.doOnPreDraw { refresher.requestQualityPartialRefresh(regionView, it.pageRect()) }
+                } else {
+                    // A GONE view keeps its last bounds, but read them while
+                    // they are certainly the rows the strip is painted on.
+                    val strip = banner.pageRect()
+                    banner.visibility = View.GONE
+                    if (repaintStrip) refresher.requestQualityPartialRefresh(regionView, strip)
+                }
                 // A GONE view gets no layout pass of its own, so the hide
                 // path re-limits the pen here; the show path is finished by
                 // the relimit listener once the strip has a height.
@@ -456,6 +476,30 @@ class MainActivity : Activity() {
         if (!onboardingSeen) {
             // Full-screen intro: no controls to tap into mid-sequence.
             chromeRow.visibility = View.GONE
+            // The one line of chrome the intro does have — which page this is,
+            // and how long it stands before the next — on the chrome row's own
+            // line and at its first label's left edge, so the running head is
+            // already where it will be when the row takes the line over. Its
+            // text lands on the panel the way [statusView]'s does: the pen is
+            // shut for the whole intro, so a framework invalidate is enough.
+            val progressLine = caption("").apply {
+                setPadding(
+                    chromeRow.paddingLeft + dp(6),
+                    chromeRow.paddingTop,
+                    chromeRow.paddingRight + dp(6),
+                    chromeRow.paddingBottom,
+                )
+            }
+            root.addView(progressLine, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP,
+            ))
+            // Decided once, here, for both the welcome sentence and the
+            // checkpoint: the intro stops to ask about books only where there
+            // is something to ask — permission not yet granted, and a system
+            // screen to grant it on. Both surfaces promise the same thing.
+            val asksForBooks = !canOpenBooks() && allFilesAccess(this) != null
             onboardingController = OnboardingController(
                 segments = ONBOARDING_SEGMENTS,
                 regionView = regionView,
@@ -467,6 +511,7 @@ class MainActivity : Activity() {
                 onDone = {
                     onboardingStore.write(true)
                     onboardingSeen = true
+                    root.removeView(progressLine)
                     chromeRow.visibility = View.VISIBLE
                     inkCapture.setInputEnabled(!diaryBusy)
                     stateMachine.start()
@@ -476,11 +521,12 @@ class MainActivity : Activity() {
                 // books (ONBOARDING_SEGMENTS[4]) is where asking for the
                 // all-files-access permission actually makes sense to the
                 // writer, instead of it appearing unexplained in Settings.
-                permissionCheckpointAfter = ONBOARDING_PERMISSION_CHECKPOINT,
+                permissionCheckpointAfter = if (asksForBooks) ONBOARDING_PERMISSION_CHECKPOINT else null,
                 onPermissionCheckpoint = { showOnboardingPermissionOverlay() },
+                onCaptionChanged = { progressLine.text = it },
             )
             root.addView(
-                welcomeOverlay(this) { overlay ->
+                welcomeOverlay(this, asksForBooks) { overlay ->
                     root.removeView(overlay)
                     onboardingStarted = true
                     onboardingController?.start()
@@ -615,9 +661,11 @@ class MainActivity : Activity() {
 
     /**
      * The one interactive stop in an otherwise non-interactive onboarding —
-     * see [OnboardingController]'s permissionCheckpointAfter. Skipped
-     * entirely (resumed with nothing shown) when the permission is already
-     * granted or this device has nowhere to grant it.
+     * see [OnboardingController]'s permissionCheckpointAfter, which onCreate
+     * only wires when there is something to ask (its `asksForBooks`). The
+     * same test is repeated here so the function stays safe on its own:
+     * resumed with nothing shown when the permission is already granted or
+     * this device has nowhere to grant it.
      */
     private fun showOnboardingPermissionOverlay() {
         val grantScreen = allFilesAccess(this)
@@ -860,6 +908,9 @@ class MainActivity : Activity() {
      * visible: its "wi-fi settings" tap must not double as an ink dot, and
      * raw pen capture ignores ordinary view hit-testing entirely.
      */
+    /** The rows a direct child of [root] is painted on, in the panel coordinates [EinkRefresher] takes. */
+    private fun View.pageRect() = PageRect(left, top, right, bottom)
+
     private fun drawingRect(): Rect {
         val w = penSurface.width
         val h = penSurface.height

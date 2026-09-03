@@ -93,4 +93,52 @@ class DecideOnboardingTest {
     fun `zero segments is a programming error`() {
         decideOnboarding(OnboardingState.Writing(0), now = 0, caughtUp = true, totalSegments = 0)
     }
+
+    // --- onboardingCaption: the progress line above the page ---
+
+    @Test
+    fun `caption while writing names the page and the total`() {
+        assertEquals("page 1 of 3", onboardingCaption(OnboardingState.Writing(0), now = 0, totalSegments = totalSegments))
+        assertEquals("page 3 of 3", onboardingCaption(OnboardingState.Writing(2), now = 0, totalSegments = totalSegments))
+    }
+
+    @Test
+    fun `caption while holding counts whole seconds down, rounding up`() {
+        val state = OnboardingState.Holding(segmentIndex = 0, holdUntilMs = 5_000)
+
+        assertEquals("page 1 of 3 · next in 4", onboardingCaption(state, now = 1_000, totalSegments = totalSegments))
+        assertEquals("page 1 of 3 · next in 4", onboardingCaption(state, now = 1_001, totalSegments = totalSegments))
+        assertEquals("page 1 of 3 · next in 3", onboardingCaption(state, now = 2_000, totalSegments = totalSegments))
+        assertEquals("page 1 of 3 · next in 1", onboardingCaption(state, now = 4_999, totalSegments = totalSegments))
+    }
+
+    /** The tick that reaches the deadline advances in the same breath; a "next in 0" would be a lie the eye can catch. */
+    @Test
+    fun `caption while holding never counts below one`() {
+        val state = OnboardingState.Holding(segmentIndex = 0, holdUntilMs = 5_000)
+
+        assertEquals("page 1 of 3 · next in 1", onboardingCaption(state, now = 5_000, totalSegments = totalSegments))
+        assertEquals("page 1 of 3 · next in 1", onboardingCaption(state, now = 6_000, totalSegments = totalSegments))
+    }
+
+    @Test
+    fun `caption on the last page hands the page over instead of promising a next one`() {
+        val state = OnboardingState.Holding(segmentIndex = totalSegments - 1, holdUntilMs = 5_000)
+
+        assertEquals("page 3 of 3 · your turn in 2", onboardingCaption(state, now = 3_000, totalSegments = totalSegments))
+    }
+
+    /** What follows the hold after the books page is the permission ask, not a page — the line must not promise "next". */
+    @Test
+    fun `caption while holding at the permission checkpoint announces a question`() {
+        val state = OnboardingState.Holding(segmentIndex = 1, holdUntilMs = 5_000)
+
+        assertEquals("page 2 of 3 · a question in 2", onboardingCaption(state, now = 3_000, totalSegments = totalSegments, checkpointAfter = 1))
+        assertEquals("page 2 of 3 · next in 2", onboardingCaption(state, now = 3_000, totalSegments = totalSegments, checkpointAfter = null))
+    }
+
+    @Test
+    fun `caption is empty once done`() {
+        assertEquals("", onboardingCaption(OnboardingState.Done, now = 0, totalSegments = totalSegments))
+    }
 }

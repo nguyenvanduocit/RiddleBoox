@@ -9,6 +9,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -30,18 +31,7 @@ fun offlineBanner(context: Context, onOpenWifiSettings: () -> Unit): View {
         setTextColor(Color.BLACK)
         gravity = Gravity.CENTER_VERTICAL
     }
-    val settingsButton = TextView(context).apply {
-        text = "wi-fi settings"
-        textSize = 18f
-        setTextColor(Color.BLACK)
-        gravity = Gravity.CENTER
-        setPadding(context.dp(24), context.dp(8), context.dp(24), context.dp(8))
-        background = GradientDrawable().apply {
-            setStroke(context.dp(2), Color.BLACK)
-            setColor(Color.TRANSPARENT)
-        }
-        setOnClickListener { onOpenWifiSettings() }
-    }
+    val settingsButton = context.paperButton("wi-fi settings") { onOpenWifiSettings() }
     return LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
@@ -72,17 +62,24 @@ fun offlineBanner(context: Context, onOpenWifiSettings: () -> Unit): View {
  *
  * Callbacks are delivered on the main thread, so [onOfflineChanged] may touch
  * views directly.
+ *
+ * Only changes are reported. The system announces every capability change —
+ * signal strength, metering — on a network that is exactly as online as it
+ * was, and each report costs the listener an E-Ink repaint of the strip.
  */
 class OfflineWatcher(context: Context, private val onOfflineChanged: (Boolean) -> Unit) {
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
+    /** The answer last reported; null until the first read-out. */
+    private var offline: Boolean? = null
+
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            onOfflineChanged(!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))
+            report(!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED))
         }
 
         override fun onLost(network: Network) {
-            onOfflineChanged(true)
+            report(true)
         }
     }
 
@@ -90,11 +87,25 @@ class OfflineWatcher(context: Context, private val onOfflineChanged: (Boolean) -
         // registerDefaultNetworkCallback stays silent when there is no network
         // at all, so the current state has to be read out once by hand.
         val current = connectivity.activeNetwork?.let { connectivity.getNetworkCapabilities(it) }
-        onOfflineChanged(current?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) != true)
+        report(current?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) != true)
         connectivity.registerDefaultNetworkCallback(callback, Handler(Looper.getMainLooper()))
     }
 
     fun stop() {
         connectivity.unregisterNetworkCallback(callback)
+    }
+
+    private fun report(nowOffline: Boolean) {
+        if (nowOffline == offline) return
+        offline = nowOffline
+        // One line per real change: enough to tell, from logcat alone, whether
+        // a strip that stays on screen was never told to go or was told and
+        // never repainted.
+        Log.i(TAG, if (nowOffline) "internet lost" else "internet reachable")
+        onOfflineChanged(nowOffline)
+    }
+
+    private companion object {
+        const val TAG = "OfflineWatcher"
     }
 }

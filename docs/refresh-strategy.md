@@ -29,6 +29,12 @@
 - Khi thực sự lưu Settings, một lần recreate và một full refresh có chủ đích là
   chấp nhận được để nạp cấu hình LLM mới. Luồng này đã được smoke-test trên
   BOOX Note Air 2.
+- **Đổi visibility một view của framework trong lúc bút đang mở thì phải tự gọi
+  `EpdController` cho đúng vùng đó.** Raw drawing giữ panel ("the screen will not
+  refresh", `onyx-sdk-api-reference.md` §1), nên chỉ set `VISIBLE`/`GONE` là view đổi
+  mà panel không đổi. Offline banner (`MainActivity.kt`, callback của
+  `OfflineWatcher`) là ví dụ: ẩn/hiện đều kèm `requestQualityPartialRefresh` trên
+  rect của dải, trừ lúc startup vì `surfaceChanged` sắp full refresh cả panel.
 
 Code tham chiếu: `app/src/main/java/com/riddleboox/app/MainActivity.kt` và
 `app/src/main/java/com/riddleboox/app/settings/SettingsActivity.kt`.

@@ -39,3 +39,34 @@ fun decideOnboarding(
         OnboardingState.Done -> OnboardingDecision(state, advance = false, finished = true)
     }
 }
+
+/**
+ * The one line of chrome the intro has: which page this is, and — while a
+ * finished page stands — how long until what comes next. It exists because a
+ * page that stands still for [ONBOARDING_HOLD_MS] with nothing else on screen
+ * reads as "is it over? do I do something?"; the count says another is coming
+ * and the seconds say when. What is promised is what actually arrives: the
+ * next page, a question when the hold ends at the permission ask
+ * ([checkpointAfter], the segment index it follows), or the writer's own turn
+ * after the last page — so the end of the intro is announced and not merely
+ * happens.
+ *
+ * Seconds round up and never reach zero: the tick that reaches the deadline is
+ * the tick that turns the page, so a "next in 0" would stand for a frame with
+ * nothing following it.
+ */
+fun onboardingCaption(state: OnboardingState, now: Long, totalSegments: Int, checkpointAfter: Int? = null): String =
+    when (state) {
+        is OnboardingState.Writing -> "page ${state.segmentIndex + 1} of $totalSegments"
+        is OnboardingState.Holding -> {
+            val secondsLeft = ((state.holdUntilMs - now + 999) / 1_000).coerceAtLeast(1)
+            val page = "page ${state.segmentIndex + 1} of $totalSegments"
+            val coming = when {
+                state.segmentIndex == checkpointAfter -> "a question in"
+                state.segmentIndex + 1 >= totalSegments -> "your turn in"
+                else -> "next in"
+            }
+            "$page · $coming $secondsLeft"
+        }
+        OnboardingState.Done -> ""
+    }

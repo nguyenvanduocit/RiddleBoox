@@ -26,7 +26,8 @@ fun permissionOverlay(context: Context, onAllow: () -> Unit, onSkip: () -> Unit)
         gravity = Gravity.CENTER
     }
     val body = TextView(context).apply {
-        text = "To read the words inside your books, I need permission to see files on this device."
+        text = "To read the words inside your books, I need permission to see the files on this device. " +
+            "The system will ask in its own words; the switch it wants is called all files access."
         textSize = 18f
         typeface = Typeface.SERIF
         setTextColor(Color.BLACK)

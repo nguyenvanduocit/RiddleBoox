@@ -44,6 +44,12 @@ class OnboardingController(
      */
     private val permissionCheckpointAfter: Int? = null,
     private val onPermissionCheckpoint: () -> Unit = {},
+    /**
+     * The progress line above the page — see [onboardingCaption]. Called only
+     * when its text changes (about once a second while a page stands), never
+     * on every tick.
+     */
+    private val onCaptionChanged: (String) -> Unit = {},
 ) {
     init {
         require(segments.isNotEmpty()) { "Onboarding needs at least one segment." }
@@ -53,6 +59,7 @@ class OnboardingController(
     private var replyCursor: ReplyRevealCursor? = null
     private var lastRefreshAtMs: Long = 0L
     private var started = false
+    private var lastCaption: String? = null
 
     /** Segment index [tickHolding] is waiting to advance into, while paused at the checkpoint. */
     private var checkpointPendingSegment: Int? = null
@@ -68,6 +75,13 @@ class OnboardingController(
     private var pendingDirtyRect: PageRect? = null
 
     fun start() {
+        // Parked at the permission ask, the checkpoint owns the ticker until
+        // [proceedFromCheckpoint]. MainActivity.onResume calls start() without
+        // knowing that, and the writer can well pause on the overlay — power
+        // button, a notification — before tapping either of its buttons;
+        // ticking again here would write the next page (and could finish the
+        // whole intro) underneath the overlay.
+        if (checkpointPendingSegment != null) return
         ticker.start(TICK_MS, ::tick)
     }
 
@@ -89,6 +103,14 @@ class OnboardingController(
             is OnboardingState.Holding -> tickHolding(s, now)
             OnboardingState.Done -> Unit
         }
+        publishCaption(now)
+    }
+
+    private fun publishCaption(now: Long) {
+        val caption = onboardingCaption(state, now, segments.size, permissionCheckpointAfter)
+        if (caption == lastCaption) return
+        lastCaption = caption
+        onCaptionChanged(caption)
     }
 
     private fun beginSegment(index: Int) {

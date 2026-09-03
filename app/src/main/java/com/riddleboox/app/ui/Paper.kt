@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.Window
@@ -207,6 +208,29 @@ fun Activity.paperPage(head: View, body: View): View = LinearLayout(this).apply 
 fun Activity.textBlock(): LinearLayout = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     setPadding(dp(32), 0, dp(32), dp(56))
+}
+
+/**
+ * The one button shape this app has: a word inside a 2dp black rule, on
+ * paper. No fill and no press state — e-ink has no time for either — so the
+ * padding is the affordance: 24dp either side and 12dp above and below is what
+ * makes a word a target for a stylus, the same way [runningHead]'s captions
+ * carry their tap area as padding.
+ *
+ * Plain sans, not the caption's caps: a button is an instruction, not a label,
+ * and reads faster set the way a sentence is.
+ */
+fun Context.paperButton(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
+    text = label
+    textSize = 18f
+    setTextColor(Color.BLACK)
+    gravity = Gravity.CENTER
+    setPadding(dp(24), dp(12), dp(24), dp(12))
+    background = GradientDrawable().apply {
+        setStroke(dp(2), Color.BLACK)
+        setColor(Color.TRANSPARENT)
+    }
+    setOnClickListener { onClick() }
 }
 
 fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()

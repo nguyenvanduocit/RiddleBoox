@@ -96,4 +96,20 @@ class LibraryTest {
         assertEquals(0 to 0, progress("chưa đọc"))
         assertEquals(3 to 0, progress("3"))
     }
+
+    /**
+     * The line under a title on the shelf: who wrote it and where the reader
+     * is in it, whichever of the two the entry actually knows.
+     */
+    @Test
+    fun `a shelf line names the author and the place the reader has reached`() {
+        assertEquals(
+            "Mark Manson · page 12 of 300",
+            book("Ego", "Mark Manson").copy(page = 12, pages = 300).shelfLine(),
+        )
+        assertEquals("Mark Manson", book("Ego", "Mark Manson").shelfLine())
+        assertEquals("page 12 of 300", book("Ego").copy(page = 12, pages = 300).shelfLine())
+        assertEquals("a book with neither says nothing", "", book("Ego").shelfLine())
+        assertEquals("a page count without a total is not progress", "", book("Ego").copy(page = 3).shelfLine())
+    }
 }

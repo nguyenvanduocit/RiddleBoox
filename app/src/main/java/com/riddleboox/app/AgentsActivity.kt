@@ -21,12 +21,11 @@ import com.riddleboox.app.agent.AgentDefinition
 import com.riddleboox.app.agent.AgentSelectionStore
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.agent.toPlainText
-import com.riddleboox.app.library.Book
-import com.riddleboox.app.library.OnyxLibrary
 import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.openPaperWindow
+import com.riddleboox.app.ui.paperButton
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
 import com.riddleboox.app.ui.textBlock
@@ -56,7 +55,13 @@ class AgentsActivity : Activity() {
 
     private fun render() {
         column.removeAllViews()
-        column.addView(action("open a BOOX book") { pickBook() })
+        column.addView(
+            bookCard(),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(24) },
+        )
         val selected = selection.read()
         for (agent in store.list()) {
             val title = TextView(this).apply {
@@ -113,57 +118,50 @@ class AgentsActivity : Activity() {
         finish()
     }
 
-    /** Reads NeoReader's shelf away from the UI thread, then lets the writer choose one entry. */
-    private fun pickBook() {
-        val waiting = AlertDialog.Builder(this)
-            .setMessage("opening your BOOX library…")
-            .setNegativeButton("cancel", null)
-            .show()
-        Thread {
-            val result = runCatching { OnyxLibrary(contentResolver).books() }
-            runOnUiThread {
-                // A dismissed wait dialog is the writer changing their mind;
-                // a late provider answer must not reopen a dead Activity.
-                if (isFinishing || isDestroyed || !waiting.isShowing) return@runOnUiThread
-                waiting.dismiss()
-                result.getOrNull()?.let(::showBookPicker) ?: showBookLoadError()
-            }
-        }.apply { isDaemon = true; start() }
-    }
-
-    private fun showBookPicker(books: List<Book>) {
-        if (books.isEmpty()) {
-            AlertDialog.Builder(this)
-                .setMessage("No books were found in your BOOX library.")
-                .setPositiveButton("ok", null)
-                .show()
-            return
+    /**
+     * The way into a book companion session, set apart from the agent list
+     * below it: a ruled card that says what it is before asking for a tap.
+     * The agents are things the writer made or picked; this is a door to a
+     * different kind of session, and a caption-sized action in their column
+     * read as one more agent verb. The 2dp rule is the same one the
+     * onboarding overlays and the offline banner draw around anything that
+     * is not part of the page's prose.
+     */
+    private fun bookCard(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(20), dp(18), dp(20), dp(20))
+        background = GradientDrawable().apply {
+            setStroke(dp(2), Color.BLACK)
+            setColor(Color.WHITE)
         }
-        val labels = books.map(::bookLabel).toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("open a BOOX book")
-            .setSingleChoiceItems(labels, -1) { dialog, which ->
-                dialog.dismiss()
-                // This starts a separate, local session. It deliberately does
-                // not call select(), so the user's normal selected agent stays put.
-                startActivity(MainActivity.intent(this, books[which].id))
-                finish()
-            }
-            .setNegativeButton("cancel", null)
-            .show()
+        addView(caption("book companion"))
+        addView(
+            TextView(this@AgentsActivity).apply {
+                text = "Talk with a book from your BOOX shelf. The diary answers as that book, knowing what you have marked and how far you have read."
+                textSize = 18f
+                typeface = Typeface.SERIF
+                setTextColor(Color.BLACK)
+                setPadding(0, dp(8), 0, 0)
+                setLineSpacing(dp(3).toFloat(), 1f)
+            },
+        )
+        addView(
+            paperButton("choose a book") { startActivityForResult(BookPickerActivity.intent(this@AgentsActivity), REQUEST_BOOK) },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(16) },
+        )
     }
 
-    private fun bookLabel(book: Book): String = buildString {
-        append(book.title)
-        if (book.authors.isNotBlank()) append("\n").append(book.authors)
-        if (book.page > 0 && book.pages > 0) append("\npage ${book.page} of ${book.pages}")
-    }
-
-    private fun showBookLoadError() {
-        AlertDialog.Builder(this)
-            .setMessage("Couldn't open the BOOX library. Make sure NeoReader is available, then try again.")
-            .setPositiveButton("ok", null)
-            .show()
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_BOOK || resultCode != RESULT_OK) return
+        val bookId = data?.getStringExtra(BookPickerActivity.EXTRA_BOOK_ID) ?: return
+        // This starts a separate, local session. It deliberately does not
+        // call select(), so the user's normal selected agent stays put.
+        startActivity(MainActivity.intent(this, bookId))
+        finish()
     }
 
     /**
@@ -373,6 +371,8 @@ class AgentsActivity : Activity() {
     companion object {
         /** Marks the one action that changed the global selected agent. */
         const val EXTRA_SELECTED_AGENT_ID = "com.riddleboox.app.SELECTED_AGENT_ID"
+
+        private const val REQUEST_BOOK = 1
 
         private data class ToolOption(val id: String, val label: String)
 
