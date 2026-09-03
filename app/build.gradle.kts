@@ -125,7 +125,16 @@ dependencies {
     // KoogHttpClient.Factory: koog-agents alone does not resolve a default HTTP
     // client factory from the classpath (IllegalStateException: "No
     // KoogHttpClient.Factory provider found").
-    implementation("ai.koog:koog-agents:1.1.1")
+    implementation("ai.koog:koog-agents:1.1.1") {
+        // Play's pre-review quick check rejects rag-base: TextRange.subtract
+        // calls ArrayList.removeLast() (a Java 21 API), which throws
+        // NoSuchMethodError below Android 15. The app never touches koog's RAG
+        // or snapshot features, and agents-features-snapshot is the only other
+        // module whose bytecode references rag-base, so both stay out of the
+        // bundle. Still true for koog 1.2.0.
+        exclude(group = "ai.koog", module = "rag-base")
+        exclude(group = "ai.koog", module = "agents-features-snapshot")
+    }
     implementation("ai.koog:http-client-ktor:1.1.1")
     if (hasFirebaseConfig) {
         implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
