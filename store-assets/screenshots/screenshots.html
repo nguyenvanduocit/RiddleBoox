@@ -1,0 +1,287 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Cùng token với landing (pages/styles.css) và feature-graphic.html. */
+  :root {
+    --paper: #f1efe9;
+    --ink: #111310;
+    --muted: #686a62;
+    --line: rgba(17, 19, 16, 0.16);
+    --tomato: #ef674b;
+    --eink: #f6f5f1;
+    --serif: "Fraunces", Georgia, serif;
+    --sans: "DM Sans", sans-serif;
+    --mono: "DM Mono", monospace;
+  }
+  @font-face {
+    font-family: "RiddleScript";
+    src: url("../../pages/DancingScript.ttf") format("truetype");
+    font-weight: 400 700;
+  }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--paper); font-family: var(--sans); color: var(--ink); }
+
+  /* Một khung = đúng 1440x2560 (9:16). render.sh chọn khung qua ?shot=N. */
+  .shot {
+    width: 1440px; height: 2560px;
+    position: relative; overflow: hidden;
+    background: var(--paper);
+    display: none;
+  }
+  .shot.active { display: block; }
+  .shot::before {
+    content: "";
+    position: absolute; inset: 0; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+    opacity: .16;
+  }
+
+  .copy { position: absolute; left: 120px; right: 120px; top: 200px; z-index: 1; }
+  .eyebrow {
+    display: flex; align-items: center; gap: 16px;
+    margin: 0 0 40px;
+    color: var(--muted);
+    font: 500 30px var(--mono);
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+  .eyebrow-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--tomato);
+    box-shadow: 0 0 0 10px rgba(239,103,75,.12);
+  }
+  h1 {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 124px;
+    line-height: .98;
+    letter-spacing: -.035em;
+  }
+  h1 em { font-style: italic; color: var(--tomato); }
+  .sub {
+    margin: 44px 0 0 6px;
+    max-width: 1100px;
+    color: var(--muted);
+    font-size: 44px;
+    line-height: 1.35;
+  }
+
+  /* Thiết bị: bezel tối, màn e-ink 3:4 như BOOX Note Air. Neo đáy, cắt bớt ở mép dưới. */
+  .device {
+    position: absolute; left: 120px; right: 120px; top: 1000px; bottom: -160px;
+    z-index: 1;
+    background: var(--ink);
+    border-radius: 56px;
+    padding: 44px;
+    box-shadow: 0 60px 120px rgba(17,19,16,.22);
+  }
+  .device.tall { top: 880px; }
+  .screen {
+    position: absolute; inset: 44px;
+    background: var(--eink);
+    border-radius: 14px;
+    overflow: hidden;
+    color: var(--ink);
+  }
+  /* Thanh chrome giống guide-chrome.png (v0.4). */
+  .chrome {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 30px 40px 0;
+    font: 500 19px var(--sans);
+    letter-spacing: .08em; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .chrome .group { display: flex; gap: 26px; align-items: center; }
+  .chrome .sep { width: 2px; height: 34px; background: var(--ink); opacity: .7; margin: 0 6px; }
+  .chrome-rule { height: 2px; background: var(--ink); margin: 26px 40px 0; }
+  .curl {
+    position: absolute; right: 26px; top: 128px;
+    font: 400 84px var(--serif); line-height: 1;
+  }
+  .page { padding: 48px 56px 0; }
+  .hand {
+    font-family: "RiddleScript";
+    font-size: 66px; line-height: 1.32;
+    margin: 0 0 40px;
+    word-spacing: .06em;
+  }
+  .hand.you { font-weight: 500; }
+  .hand.reply { font-weight: 700; }
+  .hand.large { font-size: 76px; }
+
+  /* Màn danh sách / lịch sử / settings mô phỏng theo guide-*.png. */
+  .list-title { font: 500 44px var(--serif); margin: 0; }
+  .list-meta { font: 400 27px var(--serif); color: var(--muted); margin: 10px 0 0; }
+  .list-desc { font: 400 30px var(--serif); margin: 12px 0 0; }
+  .list-action { font: 500 26px var(--sans); letter-spacing: .14em; margin: 30px 0 0; }
+  .list-row { padding: 44px 0 40px; border-bottom: 2px solid var(--ink); }
+  .list-row.active .list-title::after { content: "  · in use"; color: var(--muted); font-size: 34px; }
+  .search { font: 400 30px var(--sans); color: #9a9b95; margin: 30px 0 60px; }
+  .hist { font: 400 36px var(--serif); margin: 0; }
+  .hist-meta { font: 400 26px var(--serif); letter-spacing: .1em; margin: 12px 0 0; }
+  .hist-row { padding: 0 0 36px; margin-bottom: 40px; border-bottom: 2px solid var(--ink); }
+  .set-h { font: 700 40px var(--sans); letter-spacing: .06em; margin: 48px 0 40px; display: flex; justify-content: space-between; align-items: baseline; }
+  .set-h span { font: 500 26px var(--sans); letter-spacing: .14em; }
+  .set-label { font: 500 26px var(--sans); letter-spacing: .14em; margin: 0; }
+  .set-value { font: 400 32px var(--mono); margin: 14px 0 0; }
+  .set-row { padding: 0 0 26px; margin-bottom: 40px; border-bottom: 2px solid rgba(17,19,16,.55); }
+</style>
+</head>
+<body>
+
+<section class="shot" id="shot-1">
+  <div class="copy">
+    <p class="eyebrow"><span class="eyebrow-dot"></span>BOOX &middot; Android</p>
+    <h1>Write with your pen.<br>It answers <em>in ink.</em></h1>
+    <p class="sub">Lift the stylus and the reply is handwritten back onto the same page.</p>
+  </div>
+  <div class="device">
+    <div class="screen">
+      <div class="chrome"><span>Write inside the frame</span><div class="group"><span>New page</span><span>Memorize</span><span class="sep"></span><span>Chit chat</span><span>History</span><span>Settings</span></div></div>
+      <div class="chrome-rule"></div>
+      <div class="curl">(</div>
+      <div class="page">
+        <p class="hand you">Lately I keep thinking about changing careers, but I haven't told anyone.</p>
+        <p class="hand reply">That feeling is normal. A career change is a big decision, so you don't have to rush it or carry it alone. Start by finding out what pulls you toward the new field. Try a small project there, then pick one person you trust and tell them. You can prepare step by step instead of having to jump.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot" id="shot-2">
+  <div class="copy">
+    <p class="eyebrow"><span class="eyebrow-dot"></span>No keyboard. No chat bubbles.</p>
+    <h1>An AI agent that <em>lives inside</em> your BOOX.</h1>
+    <p class="sub">A blank page opens with a question in handwriting. You answer the way you'd write in a diary.</p>
+  </div>
+  <div class="device">
+    <div class="screen">
+      <div class="chrome"><span>Write inside the frame</span><div class="group"><span>New page</span><span>Memorize</span><span class="sep"></span><span>Chit chat</span><span>History</span><span>Settings</span></div></div>
+      <div class="chrome-rule"></div>
+      <div class="curl">(</div>
+      <div class="page">
+        <p class="hand reply large">Tell me one thing you haven't told anyone yet.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot" id="shot-3">
+  <div class="copy">
+    <p class="eyebrow"><span class="eyebrow-dot"></span>Reading companion</p>
+    <h1>It has read <em>your</em> library.</h1>
+    <p class="sub">Ask about the book you're in the middle of. It searches the shelf and highlights already on your BOOX.</p>
+  </div>
+  <div class="device">
+    <div class="screen">
+      <div class="chrome"><span>Write inside the frame</span><div class="group"><span>New page</span><span>Memorize</span><span class="sep"></span><span>Library</span><span>History</span><span>Settings</span></div></div>
+      <div class="chrome-rule"></div>
+      <div class="curl">(</div>
+      <div class="page">
+        <p class="hand you">Where did I stop in Meditations, and what did I mark?</p>
+        <p class="hand reply">You're in Book 4, about a third of the way through. Your last highlight: "The happiness of your life depends upon the quality of your thoughts." Two pages later Marcus returns to the same idea with the retreat into oneself. Want to pick up from there?</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot" id="shot-4">
+  <div class="copy">
+    <p class="eyebrow"><span class="eyebrow-dot"></span>Agents</p>
+    <h1>One agent <em>per role.</em></h1>
+    <p class="sub">A friend. A reading companion. A tutor. Each with its own name, personality, tools, and memory.</p>
+  </div>
+  <div class="device">
+    <div class="screen">
+      <div class="chrome"><div class="group"><span>&lsaquo; Back</span><span>Agents</span></div><span>Create</span></div>
+      <div class="chrome-rule"></div>
+      <div class="curl">(</div>
+      <div class="page">
+        <div class="list-row active">
+          <p class="list-title">Chit chat</p>
+          <p class="list-meta">chat &middot; default &middot; tools: workspace, memory &middot; greetings: 10</p>
+          <p class="list-desc">A friend who talks naturally and keeps the thread of a conversation.</p>
+          <p class="list-action">Use</p>
+        </div>
+        <div class="list-row">
+          <p class="list-title">Library</p>
+          <p class="list-meta">library &middot; default &middot; tools: workspace, library, dilib &middot; greetings: 5</p>
+          <p class="list-desc">Finds books, passages, reading progress, and highlights on this BOOX.</p>
+          <p class="list-action">Use</p>
+        </div>
+        <div class="list-row">
+          <p class="list-title">French tutor</p>
+          <p class="list-meta">tutor &middot; tools: workspace, memory &middot; greetings: 5</p>
+          <p class="list-desc">Corrects what you write and answers back in simple French.</p>
+          <p class="list-action">Use</p>
+        </div>
+        <div class="list-row">
+          <p class="list-title">Notes</p>
+          <p class="list-meta">notes &middot; default &middot; tools: workspace, boox_notes &middot; greetings: 5</p>
+          <p class="list-desc">Remembers, organizes, and searches your notes.</p>
+          <p class="list-action">Use</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot" id="shot-5">
+  <div class="copy">
+    <p class="eyebrow"><span class="eyebrow-dot"></span>Memory between sessions</p>
+    <h1>It remembers <em>the thread.</em></h1>
+    <p class="sub">Every conversation stays on your device, searchable. Come back to a thought instead of starting over.</p>
+  </div>
+  <div class="device">
+    <div class="screen">
+      <div class="chrome"><div class="group"><span>&lsaquo; Back</span><span>Chit chat &middot; History</span></div><span>Export all</span></div>
+      <div class="chrome-rule"></div>
+      <div class="curl">(</div>
+      <div class="page">
+        <p class="search">search history</p>
+        <div class="hist-row"><p class="hist">Lately I keep thinking about changing careers, but I haven't told anyone.</p><p class="hist-meta">29/8/2026 &middot; 15:19 &middot; 3 TURNS</p></div>
+        <div class="hist-row"><p class="hist">Where did I stop in Meditations, and what did I mark?</p><p class="hist-meta">27/8/2026 &middot; 22:04 &middot; 2 TURNS</p></div>
+        <div class="hist-row"><p class="hist">Today was heavier than it looked from the outside.</p><p class="hist-meta">24/8/2026 &middot; 23:41 &middot; 4 TURNS</p></div>
+        <div class="hist-row"><p class="hist">I want to read more this autumn. Where should I start?</p><p class="hist-meta">21/8/2026 &middot; 20:12 &middot; 2 TURNS</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="shot" id="shot-6">
+  <div class="copy">
+    <p class="eyebrow"><span class="eyebrow-dot"></span>Your key, your model</p>
+    <h1>Bring your <em>own key.</em></h1>
+    <p class="sub">Works with OpenRouter and any OpenAI-compatible provider. Pick the model. Configure it once in Settings.</p>
+  </div>
+  <div class="device">
+    <div class="screen">
+      <div class="chrome"><div class="group"><span>&lsaquo; Back</span><span>Settings</span></div><span>Save</span></div>
+      <div class="chrome-rule"></div>
+      <div class="curl">(</div>
+      <div class="page">
+        <p class="set-h">CONNECTION <span>Restore defaults</span></p>
+        <div class="set-row"><p class="set-label">BASE URL</p><p class="set-value">OpenRouter</p></div>
+        <div class="set-row"><p class="set-label">API KEY</p><p class="set-value">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</p></div>
+        <div class="set-row"><p class="set-label">MODEL</p><p class="set-value">openai/gpt-5.6-luna</p></div>
+        <p class="set-h">READING &amp; WRITING</p>
+        <div class="set-row"><p class="set-label">REPLY FONT SIZE</p><p class="set-value">medium &mdash; default</p></div>
+        <div class="set-row"><p class="set-label">SEND MODE</p><p class="set-value">automatic</p></div>
+        <div class="set-row"><p class="set-label">BOOKS ON THIS DEVICE</p><p class="set-value" style="font-family: var(--sans)">can read the words inside your books</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // ?shot=N chọn khung để render; không có tham số thì hiện khung 1 để xem nhanh.
+  const n = new URLSearchParams(location.search).get('shot') || '1';
+  document.getElementById('shot-' + n).classList.add('active');
+</script>
+</body>
+</html>
