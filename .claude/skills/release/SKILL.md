@@ -48,6 +48,7 @@ Reject any other argument. Reject an exact version that is not greater than the 
 4. Google Play requirements that block a release at submission time — verify before building:
    - `targetSdk` must be at least the current Play minimum (36 as of 2026-09).
    - The dependency tree must not contain API bypass SDKs (e.g. `org.lsposed.hiddenapibypass`) — Play's pre-review quick checks hard-reject them.
+   - No bytecode may call `List.removeFirst()`/`removeLast()` (Java 21 APIs; the quick check "Kotlin incompatibilities will cause crashes" rejects the bundle). After `assembleRelease`, run `unzip -o app/build/outputs/apk/release/app-release.apk 'classes*.dex' -d /tmp/dexscan && for d in /tmp/dexscan/classes*.dex; do $ANDROID_HOME/build-tools/35.0.0/dexdump -d "$d"; done | LC_ALL=C grep -cE 'Ljava/util/(ArrayList|List);\.remove(Last|First):'` and require `0`. A hit names a library to exclude (koog's `rag-base` was the 0.4.4 case, see `app/build.gradle.kts`).
 
 ### 2. Bump, test, and build
 
