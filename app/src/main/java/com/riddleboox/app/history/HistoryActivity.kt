@@ -17,6 +17,7 @@ import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.hairlineWidth
+import com.riddleboox.app.ui.keepPageVisible
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
@@ -105,6 +106,7 @@ class HistoryActivity : Activity() {
         searchField = EditText(this).apply {
             hint = "search history"
             setSingleLine()
+            keepPageVisible()
             textSize = 17f
             setTextColor(Color.BLACK)
             setBackgroundColor(Color.TRANSPARENT)

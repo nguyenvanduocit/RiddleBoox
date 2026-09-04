@@ -11,6 +11,7 @@ import android.widget.TextView
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.hairlineWidth
+import com.riddleboox.app.ui.keepPageVisible
 
 /**
  * The small set of row widgets [SettingsActivity]'s own page is built from —
@@ -115,6 +116,7 @@ internal fun Activity.valueField(value: String, inputType: Int): EditText = Edit
     setText(value)
     setSingleLine()
     this.inputType = inputType
+    keepPageVisible()
     textSize = 17f
     typeface = Typeface.MONOSPACE
     setTextColor(Color.BLACK)

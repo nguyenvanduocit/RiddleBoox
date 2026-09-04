@@ -13,6 +13,7 @@ import android.widget.TextView
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
 import com.riddleboox.app.ui.hairlineWidth
+import com.riddleboox.app.ui.keepPageVisible
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
@@ -51,6 +52,7 @@ class LockActivity : Activity() {
 
         pinField = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            keepPageVisible()
             textSize = 17f
             setTextColor(Color.BLACK)
             setBackgroundColor(Color.TRANSPARENT)

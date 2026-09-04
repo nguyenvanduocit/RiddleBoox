@@ -324,3 +324,47 @@ deadline, `last status: reading the page again…` — a full `testDebugUnitTest
 run (613 tests) while a multi-agent copy-writing workflow was loading the
 machine. Isolated re-run: green. The change in flight touched only the
 `onboarding` package, `WelcomeOverlay`, and the intro block of `MainActivity`.
+
+## 9. The running head — "save" included — vanishes on Settings after typing: the keyboard goes full screen (High on the BOOX Go line; fixed on `fix/paper-window-insets`, verified on Note Air 2, Go verification pending)
+
+Reported 2026-09-04 on BOOX Go 7 / Go Color 7 / Go 10.3 (Android 13): after
+tapping the api key field, or a "type it in…" dialog, the top line
+(`‹ back · settings · save`) is gone and no status bar shows in its place; the
+diary page itself is fine. Not reproducible on Note Air 2 (Android 11).
+
+Reproduced the same day on a stock API 33 emulator with the pre-fix build
+(`14abe23`) and a landscape-shaped window (`wm size 1264x1100`, `wm density
+300`): focusing the api key field puts the IME into full-screen "extract" mode
+— its own editor and a DONE button replace the whole page. `uiautomator dump`
+still reports SAVE at `[1076,62][1204,138]` because the page is intact *behind*
+the IME; the screenshot shows nothing of it. Ruled out on stock along the way:
+the window does not pan (SAVE bounds identical before, during and after the
+IME even with the field under the keyboard) and the status bar is not what
+covers the head. The Onyx keyboard applies its own rule for going full screen,
+which is presumably how the Go line gets there in portrait.
+
+Fix: every `EditText` calls `keepPageVisible()` (`ui/Paper.kt`), which sets
+`IME_FLAG_NO_FULLSCREEN | IME_FLAG_NO_EXTRACT_UI`. In the same change the
+window left the deprecated `systemUiVisibility` flags for
+`WindowCompat.setDecorFitsSystemWindows(false)` + `WindowInsetsControllerCompat`
+(bars re-hidden whenever the window regains focus), and the page takes its own
+insets: `holdAboveKeyboard()` on `paperPage`'s root so the keyboard shrinks the
+body instead of covering the field, `holdUnderSystemBars()` on every running
+head and on MainActivity's chrome row so a bar the firmware keeps pushes the
+line down instead of over it. Guarded by `ui/PaperInsetsTest`,
+`ui/KeyboardOnThePageTest`, `settings/SettingsWidgetsTest`.
+
+Verified 2026-09-04 on a Note Air 2 (Android 11, Onyx keyboard) with the fixed
+debug build via `scripts/install.sh`: the diary page's chrome row and the
+Settings head lay out at the same pixels as before (SAVE at `[1265,0][1356,56]`
+before, during and after the keyboard), the page stays visible with the
+keyboard up, and the app opens and writes normally. No regression.
+
+Still to verify on a Go device (the emulator can only stand in for stock
+Android): open Settings → tap api key → type → the head must stay, and the
+field must sit above the keyboard. Read-only check while the keyboard is up:
+
+```
+adb exec-out uiautomator dump /dev/tty | tr '>' '\n' | grep -i 'text="save"'   # bounds top >= 0
+adb exec-out screencap -p > settings-ime.png                                     # page visible above keyboard
+```

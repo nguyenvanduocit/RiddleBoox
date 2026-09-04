@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.text.InputType
 import android.widget.EditText
 import android.widget.TextView
+import com.riddleboox.app.ui.keepPageVisible
 
 /**
  * The "PIN lock" row on [SettingsActivity]'s page, entirely
@@ -91,6 +92,7 @@ internal class PinField(private val activity: Activity) {
 
     private fun pinInput(): EditText = EditText(activity).apply {
         inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        keepPageVisible()
     }
 
     /**

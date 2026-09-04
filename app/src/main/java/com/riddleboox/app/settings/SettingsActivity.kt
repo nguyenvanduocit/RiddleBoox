@@ -196,9 +196,10 @@ class SettingsActivity : Activity() {
                 text = "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})"
             }))
         }
-        // "save" rides in the running head rather than under the last field: the
-        // soft keyboard eats the lower half of the screen while a field is
-        // focused, and the head is the one strip of page it never covers.
+        // "save" rides in the running head rather than under the last field:
+        // the head is pinned above the scrolling body, so it stays in view
+        // however long the page grows and whatever the keyboard takes from the
+        // foot of it — see paperPage and holdAboveKeyboard.
         setContentView(paperPage(runningHead("settings", "save", onAction = { save() }) { leave() }, column))
     }
 
