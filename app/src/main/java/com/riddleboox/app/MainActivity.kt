@@ -839,7 +839,7 @@ class MainActivity : Activity() {
                 }
                 add(
                     BooxNotesTools(
-                        contentResolver,
+                        this@MainActivity,
                         visionReader,
                         openNote = { note ->
                             withContext(Dispatchers.Main.immediate) { openBooxNotebook(note) }
@@ -851,7 +851,7 @@ class MainActivity : Activity() {
             // shelf and Notebook in one call, so it only appears once an
             // agent can see both on their own.
             if (AgentCapability.LIBRARY in capabilities && AgentCapability.BOOX_NOTES in capabilities) {
-                add(BooxStateTools(OnyxLibrary(contentResolver), OnyxBooxNotes(contentResolver)))
+                add(BooxStateTools(OnyxLibrary(contentResolver), OnyxBooxNotes(this@MainActivity, contentResolver)))
             }
             // This check is intentionally stricter than the manifest alone:
             // no custom agent can gain awareness of the agent-management API.
