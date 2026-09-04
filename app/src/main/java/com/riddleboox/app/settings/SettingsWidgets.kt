@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
+import com.riddleboox.app.ui.hairlineWidth
 
 /**
  * The small set of row widgets [SettingsActivity]'s own page is built from —
@@ -33,7 +34,7 @@ internal fun Activity.field(label: String, input: View): LinearLayout {
         )
         addView(
             View(activity).apply { setBackgroundColor(Color.BLACK) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)),
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, hairlineWidth()),
         )
     }
 }
@@ -68,12 +69,13 @@ internal fun Activity.sectionHeader(title: String): TextView = TextView(this).ap
 }
 
 /**
- * A [sectionHeader] carrying one small action at its right edge — for an
- * operation that belongs to the whole section rather than to any one field
- * under it. The action is set in [caption], the same quiet chrome type as the
- * running head's "save", so it reads as a control and not as a fourth field.
+ * A [sectionHeader] carrying one or more small actions at its right edge —
+ * for operations that belong to the whole section rather than to any one
+ * field under it. Each action reads in [caption], the same quiet chrome type
+ * as the running head's "save", so it reads as a control and not as a
+ * fourth field.
  */
-internal fun Activity.sectionHeader(title: String, actionLabel: String, onAction: () -> Unit): LinearLayout =
+internal fun Activity.sectionHeader(title: String, vararg actions: Pair<String, () -> Unit>): LinearLayout =
     LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.BOTTOM
@@ -81,14 +83,17 @@ internal fun Activity.sectionHeader(title: String, actionLabel: String, onAction
             sectionHeader(title),
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
         )
-        addView(
-            // The padding is the tap target, the same trade the running head
-            // makes: a 16sp caption is a small thing to hit with a stylus.
-            caption(actionLabel).apply {
-                setPadding(dp(24), dp(16), 0, dp(4))
-                setOnClickListener { onAction() }
-            },
-        )
+        actions.forEach { (actionLabel, onAction) ->
+            addView(
+                // The padding is the tap target, the same trade the running
+                // head makes: a 16sp caption is a small thing to hit with a
+                // stylus.
+                caption(actionLabel).apply {
+                    setPadding(dp(24), dp(16), 0, dp(4))
+                    setOnClickListener { onAction() }
+                },
+            )
+        }
     }
 
 /** Reads like the fields around it, but opens a list instead of a keyboard. */

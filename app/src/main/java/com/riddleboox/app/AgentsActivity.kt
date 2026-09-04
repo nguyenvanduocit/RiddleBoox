@@ -23,7 +23,9 @@ import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.agent.toPlainText
 import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.ui.caption
+import com.riddleboox.app.ui.chromeStrokeWidth
 import com.riddleboox.app.ui.dp
+import com.riddleboox.app.ui.hairlineWidth
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperButton
 import com.riddleboox.app.ui.paperPage
@@ -99,7 +101,7 @@ class AgentsActivity : Activity() {
                     addView(actions)
                     addView(View(this@AgentsActivity).apply { setBackgroundColor(Color.BLACK) }, LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        dp(1),
+                        hairlineWidth(),
                     ))
                 },
             )
@@ -123,7 +125,7 @@ class AgentsActivity : Activity() {
      * below it: a ruled card that says what it is before asking for a tap.
      * The agents are things the writer made or picked; this is a door to a
      * different kind of session, and a caption-sized action in their column
-     * read as one more agent verb. The 2dp rule is the same one the
+     * read as one more agent verb. [chromeStrokeWidth] is the same rule the
      * onboarding overlays and the offline banner draw around anything that
      * is not part of the page's prose.
      */
@@ -131,7 +133,7 @@ class AgentsActivity : Activity() {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(20), dp(18), dp(20), dp(20))
         background = GradientDrawable().apply {
-            setStroke(dp(2), Color.BLACK)
+            setStroke(chromeStrokeWidth(), Color.BLACK)
             setColor(Color.WHITE)
         }
         addView(caption("book companion"))
@@ -320,7 +322,7 @@ class AgentsActivity : Activity() {
         tag.background = GradientDrawable().apply {
             cornerRadius = dp(4).toFloat()
             setColor(if (selected) Color.BLACK else Color.WHITE)
-            setStroke(dp(1), Color.BLACK)
+            setStroke(hairlineWidth(), Color.BLACK)
         }
     }
 

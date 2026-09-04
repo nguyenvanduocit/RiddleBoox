@@ -13,6 +13,7 @@ import com.riddleboox.app.library.Book
 import com.riddleboox.app.library.OnyxLibrary
 import com.riddleboox.app.library.shelfLine
 import com.riddleboox.app.ui.dp
+import com.riddleboox.app.ui.hairlineWidth
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperButton
 import com.riddleboox.app.ui.paperPage
@@ -124,7 +125,7 @@ class BookPickerActivity : Activity() {
             }
             addView(
                 View(this@BookPickerActivity).apply { setBackgroundColor(Color.BLACK) },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, hairlineWidth()).apply {
                     topMargin = dp(12)
                 },
             )

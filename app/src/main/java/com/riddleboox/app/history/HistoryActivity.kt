@@ -16,6 +16,7 @@ import androidx.core.content.FileProvider
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
+import com.riddleboox.app.ui.hairlineWidth
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
@@ -172,7 +173,7 @@ class HistoryActivity : Activity() {
             addView(note)
             addView(
                 View(this@HistoryActivity).apply { setBackgroundColor(Color.BLACK) },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, hairlineWidth()).apply {
                     topMargin = dp(12)
                 },
             )

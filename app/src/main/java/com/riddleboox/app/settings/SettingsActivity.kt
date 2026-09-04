@@ -145,13 +145,21 @@ class SettingsActivity : Activity() {
         libraryField = statusField()
         showBaseUrl()
         val column = textBlock().apply {
-            // "restore defaults" rides the section title because it acts on
-            // the section as a whole: base url and model together — never the
-            // api key, see resetConnectionDefaults().
-            addView(sectionHeader("AI model", "restore defaults") { resetConnectionDefaults() })
+            // Both header actions act on the section as a whole rather than
+            // any one field, but not on the same fields: "restore defaults"
+            // touches base url and model only — never the api key, see
+            // resetConnectionDefaults() — while "set up from phone" (QR
+            // pairing) overwrites all three, api key included, see
+            // onActivityResult().
+            addView(
+                sectionHeader(
+                    "AI model",
+                    "restore defaults" to { resetConnectionDefaults() },
+                    "set up from phone" to { openPairing() },
+                ),
+            )
             addView(field("base url", baseUrlChooser))
             addView(field("api key", apiKeyField))
-            addView(field("set up from phone", chooserField("scan a QR from your phone") { openPairing() }))
             addView(field("model", modelField))
 
             addView(sectionHeader("reading & writing"))
@@ -160,7 +168,7 @@ class SettingsActivity : Activity() {
             addView(field("pen style", penStyleRow.field))
             addView(field("stroke width", penWidthRow.field))
 
-            addView(sectionHeader("permissions", "check") { checkPermissions() })
+            addView(sectionHeader("permissions", "check" to { checkPermissions() }))
             addView(field("books on this device", libraryField))
 
             addView(sectionHeader("security & info"))

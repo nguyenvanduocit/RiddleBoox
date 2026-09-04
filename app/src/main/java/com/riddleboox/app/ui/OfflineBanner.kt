@@ -36,7 +36,7 @@ fun offlineBanner(context: Context, onOpenWifiSettings: () -> Unit): View {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         background = GradientDrawable().apply {
-            setStroke(context.dp(2), Color.BLACK)
+            setStroke(context.chromeStrokeWidth(), Color.BLACK)
             setColor(Color.WHITE)
         }
         // The strip must own its touches: a tap that misses the button should

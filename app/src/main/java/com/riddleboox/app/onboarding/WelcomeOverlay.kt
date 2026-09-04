@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.riddleboox.app.ui.chromeStrokeWidth
 import com.riddleboox.app.ui.dp
 
 /**
@@ -51,7 +52,7 @@ fun welcomeOverlay(context: Context, asksForBooks: Boolean, onStart: (View) -> U
         gravity = Gravity.CENTER
         setPadding(context.dp(48), context.dp(16), context.dp(48), context.dp(16))
         background = GradientDrawable().apply {
-            setStroke(context.dp(2), Color.BLACK)
+            setStroke(context.chromeStrokeWidth(), Color.BLACK)
             setColor(Color.TRANSPARENT)
         }
         setOnClickListener { onStart(overlay) }

@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.annotation.DrawableRes
+import kotlin.math.roundToInt
 
 /**
  * The sheet of paper every screen in this app is a page of: white edge to edge,
@@ -159,7 +160,7 @@ fun Activity.runningHead(
         )
         addView(
             View(this@runningHead).apply { setBackgroundColor(Color.BLACK) },
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, hairlineWidth()).apply {
                 topMargin = dp(8)
             },
         )
@@ -211,11 +212,11 @@ fun Activity.textBlock(): LinearLayout = LinearLayout(this).apply {
 }
 
 /**
- * The one button shape this app has: a word inside a 2dp black rule, on
- * paper. No fill and no press state — e-ink has no time for either — so the
- * padding is the affordance: 24dp either side and 12dp above and below is what
- * makes a word a target for a stylus, the same way [runningHead]'s captions
- * carry their tap area as padding.
+ * The one button shape this app has: a word inside [chromeStrokeWidth]'s
+ * black rule, on paper. No fill and no press state — e-ink has no time for
+ * either — so the padding is the affordance: 24dp either side and 12dp above
+ * and below is what makes a word a target for a stylus, the same way
+ * [runningHead]'s captions carry their tap area as padding.
  *
  * Plain sans, not the caption's caps: a button is an instruction, not a label,
  * and reads faster set the way a sentence is.
@@ -227,10 +228,24 @@ fun Context.paperButton(label: String, onClick: () -> Unit): TextView = TextView
     gravity = Gravity.CENTER
     setPadding(dp(24), dp(12), dp(24), dp(12))
     background = GradientDrawable().apply {
-        setStroke(dp(2), Color.BLACK)
+        setStroke(chromeStrokeWidth(), Color.BLACK)
         setColor(Color.TRANSPARENT)
     }
     setOnClickListener { onClick() }
 }
 
-fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
+
+/**
+ * The one rule weight every card and button border in this app's chrome
+ * draws in: [paperButton], the onboarding overlays, the offline banner, the
+ * book card, and the tool tags in Agents all draw "the 2dp rule" — a phrase
+ * that was already showing up in their comments before this existed. Old
+ * BOOX panels run low enough density that a hand-picked dp(2) here and a
+ * dp(1) there rounds down toward invisible; one shared, slightly heavier
+ * value keeps every screen legible and keeps a future re-tune to one line.
+ */
+fun Context.chromeStrokeWidth(): Int = dp(3)
+
+/** The hairline dividers between rows and under [runningHead] — see [chromeStrokeWidth]. */
+fun Context.hairlineWidth(): Int = dp(2)
