@@ -317,7 +317,11 @@ kiếm (nút "xoá" riêng, chỉ hiện khi có chữ) và nút "xuất tất c
   (`settings/TranscriptFontSize.kt`) — khác `ReplyFontSize` (đơn vị px cho nét chữ viết tay
   rasterize), đây là sp cho `TextView` thường khi đọc lại.
 - **Base url chọn theo tên** (OpenAI / OpenRouter / other — chọn "other" mới hiện ô gõ url,
-  xem `settings/Providers.kt`), **api key che dạng password**, **danh sách model hỏi thẳng
+  xem `settings/Providers.kt`), **api key che dạng password**, **"set up from phone"** mở
+  `PairActivity` — QR trỏ vào một HTTP server nhúng (`settings/PairingServer.kt`, ktor-server-cio)
+  trên LAN của máy, điện thoại quét, điền base url/api key/model trên một trang HTML tự chứa
+  (`settings/PairingPage.kt`) rồi gửi về; server chỉ sống khi màn hình ghép nối đang mở, mỗi
+  token dùng đúng một lần, **danh sách model hỏi thẳng
   server** (`GET /v1/models`, lọc model đọc được ảnh — `reply/ModelCatalog.kt`; offline rơi về
   shortlist đo tay trong `VISION_MODELS`), **nhập tay model id**, **khôi phục mặc định** cho
   base url + model nằm ngay trên tiêu đề mục "connection" (cố ý loại api key — xem

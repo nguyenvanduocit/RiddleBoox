@@ -151,6 +151,7 @@ class SettingsActivity : Activity() {
             addView(sectionHeader("AI model", "restore defaults") { resetConnectionDefaults() })
             addView(field("base url", baseUrlChooser))
             addView(field("api key", apiKeyField))
+            addView(field("set up from phone", chooserField("scan a QR from your phone") { openPairing() }))
             addView(field("model", modelField))
 
             addView(sectionHeader("reading & writing"))
@@ -329,6 +330,23 @@ class SettingsActivity : Activity() {
     }
 
     /**
+     * Applies [PairActivity]'s result to this form the way a hand-typed edit
+     * would land: nothing is saved here, "save" still does that. See
+     * [pairingPayloadFrom] for why the actual extraction is a plain function
+     * rather than logic inline in this override.
+     */
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_PAIR || resultCode != RESULT_OK || data == null) return
+        val payload = pairingPayloadFrom(data) ?: return
+        chosenProvider = providerFor(payload.baseUrl)
+        customBaseUrl = payload.baseUrl
+        showBaseUrl()
+        apiKeyField.setText(payload.apiKey)
+        if (payload.model.isNotEmpty()) choose(payload.model)
+    }
+
+    /**
      * Gate before [writeAndFinish], not a correction of it: a base URL that
      * already ends in `/v1` makes koog double it up into
      * `.../v1/v1/chat/completions`, a 404 with no body and no other symptom —
@@ -418,6 +436,16 @@ class SettingsActivity : Activity() {
 
     /** The base url the settings on this form add up to. */
     private fun effectiveBaseUrl(): String = chosenProvider?.baseUrl ?: customBaseUrl
+
+    /**
+     * Opens [PairActivity]. Its result — base url, api key, model — lands in
+     * [onActivityResult] and is applied to this form exactly the way a
+     * hand-typed edit would be: nothing reaches [SettingsStore] until "save"
+     * is tapped, same as every other field here.
+     */
+    private fun openPairing() {
+        startActivityForResult(PairActivity.intent(this), REQUEST_PAIR)
+    }
 
     /**
      * Asks the configured server which models it actually serves — the base
@@ -564,6 +592,7 @@ class SettingsActivity : Activity() {
         private const val EXTRA_DEFAULT_API_KEY = "com.riddleboox.app.settings.DEFAULT_API_KEY"
         private const val EXTRA_DEFAULT_MODEL = "com.riddleboox.app.settings.DEFAULT_MODEL"
         private const val REQUEST_STORAGE_PERMISSIONS = 1
+        private const val REQUEST_PAIR = 2
         private val LEGACY_STORAGE_PERMISSIONS =
             arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
         /**

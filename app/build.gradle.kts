@@ -136,6 +136,11 @@ dependencies {
         exclude(group = "ai.koog", module = "agents-features-snapshot")
     }
     implementation("ai.koog:http-client-ktor:1.1.1")
+    // PairActivity's phone-pairing server (see settings/PairingServer.kt) and
+    // its QR code — 3.3.3 matches the ktor version koog's http-client-ktor
+    // already pulls in (ktor-http, ktor-network), so no version conflicts.
+    implementation("io.ktor:ktor-server-cio:3.3.3")
+    implementation("com.google.zxing:core:3.5.4")
     if (hasFirebaseConfig) {
         implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
         implementation("com.google.firebase:firebase-crashlytics")
