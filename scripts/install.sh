@@ -118,5 +118,9 @@ fi
 INSTALLED="$(adb_dev shell dumpsys package "$PACKAGE" | grep -m1 'versionName=' | sed 's/^ *//' | tr -d '\r')"
 echo "Installed: $INSTALLED"
 
+# BOOX "auto-freezes" third-party apps once they leave the foreground, which
+# disables the package (enabled=3) and makes am start report that the activity
+# does not exist. Enabling is a no-op when the app is not frozen.
+adb_dev shell pm enable "$PACKAGE" >/dev/null
 adb_dev shell am start -W -n "$PACKAGE/.MainActivity" >/dev/null
 echo "Opened $PACKAGE on $MODEL."
