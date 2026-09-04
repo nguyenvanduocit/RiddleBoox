@@ -119,3 +119,19 @@ private fun randomToken(): String {
     SecureRandom().nextBytes(bytes)
     return bytes.joinToString("") { "%02x".format(it) }
 }
+
+/**
+ * The pure half of reading [PairActivity]'s result: null unless every extra
+ * [PairActivity] always sets on [Activity.RESULT_OK] is actually present —
+ * an activity-result `Intent` is a process boundary, worth checking like any
+ * other external input, the same reason `MainActivity.onActivityResult`
+ * treats `HistoryActivity`'s resume-id extra as nullable. Kept as a plain
+ * function taking an `Intent` (not a whole `Activity`) so it can be tested
+ * without building a real [SettingsActivity] — see the class doc there.
+ */
+fun pairingPayloadFrom(data: Intent): PairingPayload? {
+    val baseUrl = data.getStringExtra(PairActivity.EXTRA_BASE_URL) ?: return null
+    val apiKey = data.getStringExtra(PairActivity.EXTRA_API_KEY) ?: return null
+    val model = data.getStringExtra(PairActivity.EXTRA_MODEL).orEmpty()
+    return PairingPayload(baseUrl, apiKey, model)
+}
