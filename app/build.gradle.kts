@@ -41,8 +41,8 @@ android {
         minSdk = 29
         // Google Play yêu cầu targetSdk 36 cho bản phát hành mới từ 31/8/2026.
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.4.6"
+        versionCode = 11
+        versionName = "0.4.7"
 
         buildConfigField("String", "LLM_API_KEY", "\"${localProperties.getProperty("llm.apiKey", "")}\"")
         buildConfigField("String", "LLM_BASE_URL", "\"${localProperties.getProperty("llm.baseUrl", "https://openrouter.ai/api")}\"")
