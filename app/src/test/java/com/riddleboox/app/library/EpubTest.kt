@@ -113,6 +113,35 @@ class EpubTest {
         assertNull(Epub.open(folder.root.resolve("gone.epub")))
     }
 
+    /**
+     * [ZipFile] needs random-access seeking a `content://` stream doesn't give — the SAF
+     * read path copies into a temp file first. Opening from a stream this way must read
+     * back identically to opening the same bytes as a plain [java.io.File].
+     */
+    @Test
+    fun `open from a stream copies into the temp file and reads back the same book`() {
+        val source = writeSampleEpub(folder.newFile("book.epub"))
+        val tempFile = folder.newFile("copied.epub.tmp")
+
+        val epub = source.inputStream().use { Epub.open(it, tempFile) } ?: error("stream-opened epub was null")
+
+        epub.use {
+            assertEquals(3, it.chapters.size)
+            assertEquals("Chương một", it.chapters[0].title)
+        }
+        assertTrue("temp file is cleaned up once the epub is closed", !tempFile.exists())
+    }
+
+    @Test
+    fun `open from a stream that is not a book cleans up the temp file`() {
+        val tempFile = folder.newFile("copied.epub.tmp")
+
+        val epub = "not a zip".byteInputStream().use { Epub.open(it, tempFile) }
+
+        assertNull(epub)
+        assertTrue("temp file is cleaned up on failure too", !tempFile.exists())
+    }
+
     /** A zip that opens but has no package document is not a book either. */
     @Test
     fun `a zip without a package document is not opened`() {

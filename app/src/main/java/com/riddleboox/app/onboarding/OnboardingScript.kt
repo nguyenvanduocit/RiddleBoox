@@ -15,7 +15,7 @@ package com.riddleboox.app.onboarding
  * because it is hidden in the default (automatic) send mode.
  *
  * Invariants live in OnboardingScriptTest: six pages, page 5 is the books page
- * (the all-files-access ask follows it — MainActivity's
+ * (the folder-grant ask follows it — MainActivity's
  * ONBOARDING_PERMISSION_CHECKPOINT), each page fits one sheet at the largest
  * reply font, every quoted label exists on the chrome.
  */

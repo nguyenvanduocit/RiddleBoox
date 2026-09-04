@@ -1,6 +1,5 @@
 package com.riddleboox.app
 
-import android.Manifest
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.ComponentName
@@ -22,7 +21,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnPreDraw
 import kotlinx.coroutines.Dispatchers
@@ -63,9 +61,13 @@ import com.riddleboox.app.settings.SettingsActivity
 import com.riddleboox.app.library.Book
 import com.riddleboox.app.library.BookAccessCheck
 import com.riddleboox.app.library.OnyxLibrary
-import com.riddleboox.app.library.allFilesAccess
 import com.riddleboox.app.library.canOpenBooks
 import com.riddleboox.app.library.checkBookAccess
+import com.riddleboox.app.library.documentAt
+import com.riddleboox.app.library.openBookViaGrant
+import com.riddleboox.app.library.persistStorageGrant
+import com.riddleboox.app.library.relativePathUnder
+import com.riddleboox.app.library.requestStorageAccessIntent
 import com.riddleboox.app.onboarding.permissionOverlay
 import com.riddleboox.app.settings.SendMode
 import com.riddleboox.app.settings.SendModeStore
@@ -189,7 +191,7 @@ class MainActivity : Activity() {
                 cmd == "state" -> stateMachine.debugStateSummary()
                 cmd == "position" -> stateMachine.debugReplyPosition()
                 cmd.startsWith("write ") -> stateMachine.debugWriteReplyInk(cmd.removePrefix("write "))
-                cmd == "bookcheck" -> when (val result = checkBookAccess(contentResolver)) {
+                cmd == "bookcheck" -> when (val result = checkBookAccess(context, contentResolver)) {
                     BookAccessCheck.PermissionMissing -> "permission missing"
                     BookAccessCheck.LibraryEmpty -> "granted, library empty"
                     BookAccessCheck.Readable -> "granted, book opened fine"
@@ -507,7 +509,7 @@ class MainActivity : Activity() {
             // checkpoint: the intro stops to ask about books only where there
             // is something to ask — permission not yet granted, and a system
             // screen to grant it on. Both surfaces promise the same thing.
-            val asksForBooks = !canOpenBooks() && allFilesAccess(this) != null
+            val asksForBooks = !canOpenBooks(this)
             onboardingController = OnboardingController(
                 segments = ONBOARDING_SEGMENTS,
                 regionView = regionView,
@@ -645,25 +647,27 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_HISTORY && resultCode == RESULT_OK) {
             pendingResumeId = data?.getStringExtra(HistoryActivity.EXTRA_RESUME_ID)
         }
-        // ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION always comes back with
-        // RESULT_CANCELED regardless of what the writer actually did on that
-        // screen — canOpenBooks() is the only honest way to tell.
-        if (requestCode == REQUEST_ONBOARDING_PERMISSION) testBookAccessThenResumeOnboarding()
+        // ACTION_OPEN_DOCUMENT_TREE returns RESULT_OK with the granted folder's Uri in
+        // data.data; RESULT_CANCELED (or a null Uri) means the writer backed out.
+        if (requestCode == REQUEST_ONBOARDING_PERMISSION) {
+            data?.data?.let { persistStorageGrant(this, it) }
+            testBookAccessThenResumeOnboarding()
+        }
     }
 
     /**
-     * Called once the writer returns from the all-files-access screen (or
-     * taps "not now" without ever leaving). If the switch is now on, this
-     * opens one real book to confirm reading actually works end to end — a
-     * true permission with a library the diary still can't read from would
-     * otherwise surface only much later, mid-conversation. Either way,
-     * onboarding always resumes: declining here just means the "books on
-     * this device" row in Settings does the asking later instead.
+     * Called once the writer returns from the folder picker (or taps "not
+     * now" without ever leaving). If the grant is held now, this opens one
+     * real book to confirm reading actually works end to end — a true grant
+     * with a library the diary still can't read from would otherwise surface
+     * only much later, mid-conversation. Either way, onboarding always
+     * resumes: declining here just means the "books on this device" row in
+     * Settings does the asking later instead.
      */
     private fun testBookAccessThenResumeOnboarding() {
         onboardingPermissionOverlay?.let { root.removeView(it) }
         onboardingPermissionOverlay = null
-        if (canOpenBooks()) Log.i(TAG, "onboarding permission check: ${checkBookAccess(contentResolver)}")
+        if (canOpenBooks(this)) Log.i(TAG, "onboarding permission check: ${checkBookAccess(this, contentResolver)}")
         onboardingController?.proceedFromCheckpoint()
     }
 
@@ -672,30 +676,16 @@ class MainActivity : Activity() {
      * see [OnboardingController]'s permissionCheckpointAfter, which onCreate
      * only wires when there is something to ask (its `asksForBooks`). The
      * same test is repeated here so the function stays safe on its own:
-     * resumed with nothing shown when the permission is already granted or
-     * this device has nowhere to grant it.
+     * resumed with nothing shown when the grant is already held.
      */
     private fun showOnboardingPermissionOverlay() {
-        val grantScreen = allFilesAccess(this)
-        if (canOpenBooks() || grantScreen == null) {
+        if (canOpenBooks(this)) {
             onboardingController?.proceedFromCheckpoint()
             return
         }
         val overlay = permissionOverlay(
             this,
-            onAllow = {
-                // All-files access alone was found not to be enough on at
-                // least one Android 11 device — the switch reads as on, yet
-                // every book still throws a permission denial until both
-                // legacy storage permissions are also granted. See
-                // AndroidManifest.xml's note on READ/WRITE_EXTERNAL_STORAGE.
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                    REQUEST_READ_STORAGE,
-                )
-                startActivityForResult(grantScreen, REQUEST_ONBOARDING_PERMISSION)
-            },
+            onAllow = { startActivityForResult(requestStorageAccessIntent(this), REQUEST_ONBOARDING_PERMISSION) },
             onSkip = { testBookAccessThenResumeOnboarding() },
         )
         onboardingPermissionOverlay = overlay
@@ -712,13 +702,12 @@ class MainActivity : Activity() {
      *
      * The books come from NeoReader's own database over a content provider and
      * cost nothing but a query. Opening a book to read the words inside is the
-     * one part that needs all-files access, which is granted in Settings and
-     * not by a dialog (see AndroidManifest.xml); without it the shelf, the
-     * progress and the highlights all still work and only [DiaryTools]'
-     * read_book refuses — an answer that names the Settings switch as the
-     * reason, so the refusal sends the writer to the switch instead of reading
-     * as a mood. The state is logged here as well, for the bug report that
-     * arrives without the page.
+     * one part that needs the storage folder grant, asked for in onboarding and
+     * Settings and not by a dialog here; without it the shelf, the progress and
+     * the highlights all still work and only [DiaryTools]' read_book refuses —
+     * an answer that names the Settings row as the reason, so the refusal sends
+     * the writer to the row instead of reading as a mood. The state is logged
+     * here as well, for the bug report that arrives without the page.
      */
     private fun diaryTools(): DiaryTools {
         val library = OnyxLibrary(contentResolver)
@@ -733,15 +722,23 @@ class MainActivity : Activity() {
                 TAG,
                 "library: ${shelf.getOrNull()?.let { (books, marks) -> "$books books, $marks marked passages" }
                     ?: "unreachable (${shelf.exceptionOrNull()?.message})"}" +
-                    ", books readable from disk: ${canOpenBooks()}",
+                    ", books readable from disk: ${canOpenBooks(this)}",
             )
         }
         return DiaryTools(
             library = library,
             memory = StoredMemory(conversationStore),
+            openBook = { book -> openBookViaGrant(this, book) },
+            fileExists = { path -> documentForPath(path)?.exists() == true },
+            deleteFile = { path -> documentForPath(path)?.delete() == true },
+            bookStamp = { book ->
+                val document = documentForPath(book.path)
+                "${document?.length() ?: 0}-${document?.lastModified() ?: 0}"
+            },
             openReader = { book ->
                 withContext(Dispatchers.Main.immediate) { openBookInReader(book) }
             },
+            booksReadable = { canOpenBooks(this) },
             // Extracted chapter text survives between turns and app runs, so a
             // second search through the same large book is a file read, not
             // another full pass over the zip. Android may sweep cacheDir when
@@ -750,24 +747,25 @@ class MainActivity : Activity() {
         )
     }
 
+    /** [book]'s SAF document, resolved from its raw shared-storage path — see [documentAt]. */
+    private fun documentForPath(path: String): androidx.documentfile.provider.DocumentFile? {
+        val relative = relativePathUnder(Environment.getExternalStorageDirectory().path, path) ?: return null
+        return documentAt(this, relative)
+    }
+
     /** Opens a library file through NeoReader's own external-storage provider. */
     private fun openBookInReader(book: Book): Boolean = runCatching {
-        val file = File(book.path)
-        if (!file.isFile) return@runCatching false
+        val relativePath = relativePathUnder(Environment.getExternalStorageDirectory().path, book.path)
+            ?: return@runCatching false
+        if (documentForPath(book.path)?.exists() != true) return@runCatching false
         // NeoReader treats a third-party content URI as a download and rejects
         // it. Its own provider maps /external/... to shared storage and is the
         // same handoff used when BOOX opens a book from its library.
-        val externalRoot = Environment.getExternalStorageDirectory().canonicalFile.path
-        val canonicalPath = file.canonicalFile.path
-        val prefix = "$externalRoot${File.separator}"
-        if (!canonicalPath.startsWith(prefix)) return@runCatching false
-        val relativePath = canonicalPath.removePrefix(prefix)
-            .split(File.separatorChar)
-            .joinToString("/") { Uri.encode(it) }
+        val encodedRelativePath = relativePath.split('/').joinToString("/") { Uri.encode(it) }
         val uri = Uri.Builder()
             .scheme("content")
             .authority("com.onyx.kreader.onyx.fileprovider")
-            .encodedPath("/external/$relativePath")
+            .encodedPath("/external/$encodedRelativePath")
             .build()
         val intent = Intent(Intent.ACTION_VIEW).apply {
             component = ComponentName("com.onyx.kreader", "com.onyx.kreader.ui.ReaderHomeActivity")
@@ -1017,9 +1015,8 @@ class MainActivity : Activity() {
         private const val REQUEST_HISTORY = 2
         private const val REQUEST_AGENTS = 3
         private const val REQUEST_ONBOARDING_PERMISSION = 4
-        private const val REQUEST_READ_STORAGE = 5
 
-        /** Index into ONBOARDING_SEGMENTS after which the all-files-access ask happens — see [showOnboardingPermissionOverlay]. */
+        /** Index into ONBOARDING_SEGMENTS after which the folder-grant ask happens — see [showOnboardingPermissionOverlay]. */
         private const val ONBOARDING_PERMISSION_CHECKPOINT = 4
 
         /** How long to wait before looking again for a surface with a size. */
