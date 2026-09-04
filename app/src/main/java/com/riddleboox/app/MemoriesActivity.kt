@@ -26,6 +26,7 @@ import com.riddleboox.app.tools.toPlainText
 import com.riddleboox.app.tools.writeMemories
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
+import com.riddleboox.app.ui.keepPageVisible
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperPage
 import com.riddleboox.app.ui.runningHead
@@ -136,6 +137,7 @@ class MemoriesActivity : Activity() {
         searchField = EditText(this).apply {
             hint = "search memories"
             setSingleLine()
+            keepPageVisible()
             textSize = 17f
             setTextColor(Color.BLACK)
             setBackgroundColor(Color.TRANSPARENT)

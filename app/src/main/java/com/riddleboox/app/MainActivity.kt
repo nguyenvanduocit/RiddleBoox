@@ -89,6 +89,7 @@ import com.riddleboox.app.ui.RegionViewPanel
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.chromeTopInset
 import com.riddleboox.app.ui.dp
+import com.riddleboox.app.ui.holdUnderSystemBars
 import com.riddleboox.app.ui.offlineBanner
 import com.riddleboox.app.ui.openPaperWindow
 import java.io.File
@@ -315,7 +316,10 @@ class MainActivity : Activity() {
             // the way a running head sits over its column — less the padding
             // that label carries itself.
             val sideInset = HandwritingPlanner.DEFAULT_MARGIN_X_PX.toInt() - dp(6)
-            setPadding(sideInset, chromeTopInset(), sideInset, dp(6))
+            setPadding(sideInset, 0, sideInset, dp(6))
+            // Same base as every running head, so the two lines stay level —
+            // and both give way together to a bar the firmware keeps.
+            holdUnderSystemBars(chromeTopInset())
             // What splits the line in two: what this page does, at the margin
             // the ink below it starts from, and where else the writer can go,
             // at the far end. The gap between them is [statusView], which
@@ -485,10 +489,14 @@ class MainActivity : Activity() {
             val progressLine = caption("").apply {
                 setPadding(
                     chromeRow.paddingLeft + dp(6),
-                    chromeRow.paddingTop,
+                    0,
                     chromeRow.paddingRight + dp(6),
                     chromeRow.paddingBottom,
                 )
+                // Its own listener rather than a copy of the row's top padding:
+                // that number moves when a bar the firmware keeps arrives, and
+                // a copy taken at build time would stay behind.
+                holdUnderSystemBars(chromeTopInset())
             }
             root.addView(progressLine, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,

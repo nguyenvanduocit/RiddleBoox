@@ -24,6 +24,7 @@ import com.riddleboox.app.agent.toPlainText
 import com.riddleboox.app.tools.readMemories
 import com.riddleboox.app.ui.caption
 import com.riddleboox.app.ui.dp
+import com.riddleboox.app.ui.keepPageVisible
 import com.riddleboox.app.ui.openPaperWindow
 import com.riddleboox.app.ui.paperButton
 import com.riddleboox.app.ui.paperPage
@@ -354,6 +355,7 @@ class AgentsActivity : Activity() {
         val labelView = caption(label).apply { setPadding(0, dp(10), 0, dp(2)) }
         val field = EditText(this).apply {
             setText(value)
+            keepPageVisible()
             textSize = 17f
             typeface = Typeface.MONOSPACE
             setTextColor(Color.BLACK)

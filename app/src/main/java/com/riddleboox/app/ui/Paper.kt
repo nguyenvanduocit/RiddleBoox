@@ -8,11 +8,17 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.Window
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.annotation.DrawableRes
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * The sheet of paper every screen in this app is a page of: white edge to edge,
@@ -27,18 +33,89 @@ import androidx.annotation.DrawableRes
 /**
  * Takes the system bars away *and* the space they held.
  *
- * FULLSCREEN/HIDE_NAVIGATION hide the bars; the LAYOUT_ pair is what lets the
- * page occupy where they used to be. Without them the bars vanish and their gap
- * stays — on a page that starts at the very top that reads as a band of wasted
- * paper, and the window still paints the status bar's grey scrim into it.
+ * The page is laid out edge to edge — the decor no longer fits it inside the
+ * system bars — and the bars are asked to hide, coming back only as a
+ * transient overlay on a swipe. Hiding is a one-shot request: a dialog or the
+ * soft keyboard takes the window's focus and can leave the bars showing when
+ * it hands focus back, so the request is made again each time the window
+ * regains focus.
+ *
+ * Edge to edge also means the window no longer moves or shrinks anything for
+ * the bars or the keyboard; each page does that itself. [holdUnderSystemBars]
+ * keeps a line of chrome below a bar the firmware refuses to hide, and
+ * [holdAboveKeyboard] gives the keyboard its own room at the foot of the page,
+ * so a focused field is scrolled into view instead of being covered. No view
+ * may take y = 0 for the edge of the paper. The keyboard itself is kept off
+ * the page by [keepPageVisible]: the full-screen editor it can put up is what
+ * took the running head, "save" included, off Settings on the BOOX Go line.
  */
 fun Activity.openPaperWindow() {
+    // Before anything installs the decor: setDecorFitsSystemWindows does.
     requestWindowFeature(Window.FEATURE_NO_TITLE)
-    window.decorView.systemUiVisibility =
-        View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+    WindowCompat.setDecorFitsSystemWindows(window, false)
+    val bars = WindowCompat.getInsetsController(window, window.decorView)
+    bars.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    bars.hide(WindowInsetsCompat.Type.systemBars())
+    window.decorView.viewTreeObserver.addOnWindowFocusChangeListener { hasFocus ->
+        if (hasFocus) bars.hide(WindowInsetsCompat.Type.systemBars())
+    }
+}
+
+/**
+ * Keeps a line of chrome below a status bar the firmware will not hide.
+ *
+ * The page is edge to edge, so its top edge is the panel's — and some firmware
+ * (the Go 7 Color has been reported doing it) keeps its status bar on screen
+ * over a page that asked for it to go. This view's top padding becomes
+ * [topBase] plus whatever the bars take, which is nothing when they hide as
+ * asked: the page then looks exactly as it does without the listener. The base
+ * is applied at once as well, so anything that reads this view's padding
+ * before the first insets arrive sees the same number it always did.
+ *
+ * The insets are passed on untouched so every view below still hears them.
+ */
+fun View.holdUnderSystemBars(topBase: Int) {
+    setPadding(paddingLeft, topBase, paddingRight, paddingBottom)
+    ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        v.setPadding(v.paddingLeft, topBase + bars.top, v.paddingRight, v.paddingBottom)
+        insets
+    }
+}
+
+/**
+ * Gives the soft keyboard its own room at the foot of this view.
+ *
+ * An edge-to-edge window is not resized for the keyboard, and `adjustResize`
+ * on its own does nothing for it: the keyboard simply covers the lower part
+ * of the page, focused field and all, with the window neither resized nor
+ * panned (seen on Note Air 2 and on a stock Android 13 emulator). Padding the
+ * page's root by the keyboard's height instead shrinks the body under the
+ * head, and a ScrollView that has just got shorter scrolls its focused child
+ * into view on its own.
+ */
+fun View.holdAboveKeyboard() {
+    ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+        val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
+        v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, keyboard.bottom)
+        insets
+    }
+}
+
+/**
+ * Keeps the keyboard from taking the whole screen while this field is typed
+ * into.
+ *
+ * Left to itself an IME may go full screen — on a landscape-shaped window, or
+ * whenever the keyboard's own judgement says the page is too short — and put
+ * up its own editor and a DONE button in place of the page. Nothing of the
+ * page survives that: no running head, no "save", not even a status bar, which
+ * is exactly what the BOOX Go line showed after typing an api key. Every field
+ * on a page asks for both: no full-screen mode at all, and no extracted editor
+ * should the keyboard insist on one anyway.
+ */
+fun EditText.keepPageVisible() {
+    imeOptions = imeOptions or EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI
 }
 
 /**
@@ -126,6 +203,9 @@ fun Activity.runningHead(
     val row = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        // The row takes a bar the firmware keeps; the captions keep their own
+        // [chromeTopInset], because that padding is their tap target.
+        holdUnderSystemBars(0)
         addView(
             // The padding is the tap target: a 16sp caption is a small thing to
             // hit with a stylus, so the word carries the space beside it.
@@ -180,6 +260,9 @@ fun Activity.runningHead(
 fun Activity.paperPage(head: View, body: View): View = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     setBackgroundColor(Color.WHITE)
+    // On the root, not the ScrollView: the foot padding is what shrinks the
+    // body, and only a body that has shrunk scrolls its focused field up.
+    holdAboveKeyboard()
     addView(
         head,
         LinearLayout.LayoutParams(
