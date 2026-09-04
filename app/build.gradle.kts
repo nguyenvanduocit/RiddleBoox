@@ -120,6 +120,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jsoup:jsoup:1.18.3")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.documentfile:documentfile:1.0.1")
     // Oracle turns route through koog's OpenAILLMClient (see AskDiary.kt).
     // http-client-ktor is declared explicitly and passed to OpenAILLMClient as a
     // KoogHttpClient.Factory: koog-agents alone does not resolve a default HTTP
