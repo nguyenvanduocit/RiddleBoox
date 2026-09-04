@@ -113,7 +113,8 @@ class DilibTools(
         val file = book.preferred(format)
             ?: return noFile(book, format)
         val saved = client.download(book, file, appContext)
-        return "Downloaded \"${book.title}\" (${file.format.uppercase()}) into the BOOX library: $saved. " +
+        client.index(saved, appContext)
+        return "Downloaded \"${book.title}\" (${file.format.uppercase()}) into the BOOX library: ${saved.absolutePath}. " +
             "Refresh NeoReader if the book does not appear right away."
     }
 

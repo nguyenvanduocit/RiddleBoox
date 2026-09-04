@@ -13,10 +13,10 @@ import com.riddleboox.app.ui.dp
 
 /**
  * Shown once, mid-onboarding, right after the diary explains it can read the
- * writer's books — the natural place to ask for the folder grant that makes
+ * writer's books — the natural place to ask for the permission that makes
  * that true. Same full-screen paper look as [welcomeOverlay], with two ways
- * off it: [onAllow] sends the writer to the system folder picker, [onSkip]
- * leaves it for later (see the "books on this device" row in Settings).
+ * off it: [onAllow] sends the writer to the OS switch, [onSkip] leaves it for
+ * later (see the "books on this device" row in Settings).
  */
 fun permissionOverlay(context: Context, onAllow: () -> Unit, onSkip: () -> Unit): android.view.View {
     val title = TextView(context).apply {
@@ -27,8 +27,8 @@ fun permissionOverlay(context: Context, onAllow: () -> Unit, onSkip: () -> Unit)
         gravity = Gravity.CENTER
     }
     val body = TextView(context).apply {
-        text = "To read the words inside your books, I need one folder: where they live on this " +
-            "device. Pick it once and I will remember it."
+        text = "To read the words inside your books, I need permission to see the files on this device. " +
+            "The system will ask in its own words; the switch it wants is called all files access."
         textSize = 18f
         typeface = Typeface.SERIF
         setTextColor(Color.BLACK)

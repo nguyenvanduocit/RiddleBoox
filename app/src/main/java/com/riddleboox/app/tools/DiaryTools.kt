@@ -98,8 +98,8 @@ private const val MOST = 40
  *
  * [openBook] is a seam for tests: the real one opens the file the library
  * points at, a test hands back a book built in memory. [booksReadable] is the
- * same kind of seam — the real one asks whether the storage folder grant is
- * held, which is what decides how [unopenable] explains a book that will not
+ * same kind of seam — the real one asks Android whether all-files access is
+ * on, which is what decides how [unopenable] explains a book that will not
  * open.
  */
 class DiaryTools(
@@ -107,15 +107,8 @@ class DiaryTools(
     private val memory: DiaryMemory,
     private val zone: ZoneId = ZoneId.systemDefault(),
     private val openBook: (Book) -> Epub? = { Epub.open(File(it.path)) },
-    private val fileExists: (String) -> Boolean = { File(it).isFile },
-    private val deleteFile: (String) -> Boolean = { File(it).delete() },
-    /** What identifies the current bytes of a book's file — see [CachedEpub]. */
-    private val bookStamp: (Book) -> String = { book ->
-        val file = File(book.path)
-        "${file.length()}-${file.lastModified()}"
-    },
     private val openReader: suspend (Book) -> Boolean = { false },
-    private val booksReadable: () -> Boolean = { false },
+    private val booksReadable: () -> Boolean = ::canOpenBooks,
     /**
      * Where extracted chapter text is kept between openings — see [CachedEpub].
      * Null (the default, and every test's) reads straight from the zip each
@@ -128,7 +121,7 @@ class DiaryTools(
     private fun openCached(book: Book): CachedEpub? {
         val epub = openBook(book) ?: return null
         val dir = textCacheDir?.let { File(it, cacheKey(book.id)) }
-        return CachedEpub(epub, dir, bookStamp(book))
+        return CachedEpub(epub, dir, fingerprint(book))
     }
 
     /** A directory name for [id] that no library's id scheme can make unsafe. */
@@ -136,6 +129,12 @@ class DiaryTools(
         java.security.MessageDigest.getInstance("SHA-1")
             .digest(id.toByteArray())
             .joinToString("") { "%02x".format(it) }
+
+    /** What identifies the current bytes of the book's file — see [CachedEpub]. */
+    private fun fingerprint(book: Book): String {
+        val file = File(book.path)
+        return "${file.length()}-${file.lastModified()}"
+    }
 
     override val tools: List<ToolDescriptor> = listOf(
         ToolDescriptor(
@@ -499,10 +498,11 @@ class DiaryTools(
                 ". Say more of the title to pick one."
         }
         val book = candidates.single()
-        val fileStood = book.path.isNotBlank() && fileExists(book.path)
-        if (fileStood && !keepFile && !deleteFile(book.path)) {
+        val file = File(book.path)
+        val fileStood = book.path.isNotBlank() && file.isFile
+        if (fileStood && !keepFile && !file.delete()) {
             return "\"${book.title}\" is still here: its file at ${book.path} would not delete, so nothing " +
-                "was taken out of the library either. The storage may be read-only, or the folder grant off."
+                "was taken out of the library either. The storage may be read-only, or all-files access off."
         }
         val removed = library.deleteBook(book.id)
         return "\"${book.title}\": " + listOf(
@@ -584,7 +584,7 @@ class DiaryTools(
      * Why a book the library lists could not be opened from disk.
      *
      * Two causes wear the same null from [openBook] and send the writer to
-     * different places: with the folder grant off every book on the shelf is
+     * different places: with all-files access off every book on the shelf is
      * unopenable and the diary's Settings page is the cure; with it on, this
      * one file is broken or gone. The answer names which, because the model
      * can only pass on what it is told — left as one sentence, "cannot open

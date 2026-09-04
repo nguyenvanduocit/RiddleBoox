@@ -1,12 +1,12 @@
 package com.riddleboox.app.dilib
 
 import android.content.Context
-import android.net.Uri
-import androidx.documentfile.provider.DocumentFile
-import com.riddleboox.app.library.getOrCreateDirectoryAt
+import android.media.MediaScannerConnection
+import android.os.Environment
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -54,17 +54,22 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
         return DilibParser.parseBookDetail(html, domain, number)
     }
 
-    /** Downloads one file into the BOOX library folder, through the storage folder grant. */
-    suspend fun download(book: DilibBook, file: DilibFile, context: Context): Uri {
+    /** Downloads one file into the BOOX library folder and asks Android to index it. */
+    suspend fun download(book: DilibBook, file: DilibFile, context: Context): File {
         if (file.url.isBlank()) throw DilibException("\"${book.title}\" has no download link.")
-        val destination = getOrCreateDirectoryAt(context, "Books")
-            ?: throw DilibException("Could not reach the library folder — grant folder access in Settings first.")
+        val destination = File(Environment.getExternalStorageDirectory(), "Books")
+        if (!destination.exists() && !destination.mkdirs()) {
+            throw DilibException("Could not create the library folder: ${destination.path}")
+        }
+        if (!destination.isDirectory || !destination.canWrite()) {
+            throw DilibException("No permission to write into the library: ${destination.path}")
+        }
 
         var lastError: Throwable? = null
         for (attempt in 0..DOWNLOAD_RETRIES) {
             try {
                 currentCoroutineContext().ensureActive()
-                return fetchInto(destination, context, book, file)
+                return fetchInto(destination, book, file)
             } catch (error: IOException) {
                 lastError = error
                 if (attempt == DOWNLOAD_RETRIES) break
@@ -74,7 +79,7 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
         throw DilibException("The book would not download after ${DOWNLOAD_RETRIES + 1} attempts.", lastError)
     }
 
-    private suspend fun fetchInto(destination: DocumentFile, context: Context, book: DilibBook, file: DilibFile): Uri {
+    private suspend fun fetchInto(destination: File, book: DilibBook, file: DilibFile): File {
         var connection = openFollowing(file.url)
         // Drive answers a large file with a scan-warning page instead of bytes.
         // The page is not an error, so only the content type gives it away.
@@ -90,12 +95,10 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
             }
         }
 
-        val name = uniqueName(destination, filename(connection, book, file))
-        val target = destination.createFile(mimeType(name.substringAfterLast('.', "")), name)
-            ?: throw DilibException("Could not create \"$name\" in the library folder.")
+        val target = uniqueFile(destination, filename(connection, book, file))
         try {
             connection.inputStream.use { input ->
-                context.contentResolver.openOutputStream(target.uri)!!.use { output ->
+                target.outputStream().use { output ->
                     val buffer = ByteArray(32 * 1024)
                     while (true) {
                         currentCoroutineContext().ensureActive()
@@ -111,7 +114,17 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
         } finally {
             connection.disconnect()
         }
-        return target.uri
+        return target
+    }
+
+    /** Announces the finished file so NeoReader sees it without a rescan. */
+    fun index(file: File, context: Context) {
+        MediaScannerConnection.scanFile(
+            context.applicationContext,
+            arrayOf(file.absolutePath),
+            arrayOf(mimeType(file.extension)),
+            null,
+        )
     }
 
     private fun getHtml(url: String): String {
@@ -204,17 +217,14 @@ class DilibClient(domain: String = DEFAULT_DOMAIN) {
         .take(120)
         .ifBlank { "dilib" }
 
-    private fun uniqueName(directory: DocumentFile, requested: String): String =
-        uniqueName({ directory.findFile(it) != null }, requested)
-
-    /** [requested], or the same name with a counter appended until [exists] says no one has it. */
-    internal fun uniqueName(exists: (String) -> Boolean, requested: String): String {
-        if (!exists(requested)) return requested
+    private fun uniqueFile(directory: File, requested: String): File {
+        val plain = File(directory, requested)
+        if (!plain.exists()) return plain
         val base = requested.substringBeforeLast('.', requested)
         val ext = requested.substringAfterLast('.', "").let { if (it.isBlank()) "" else ".$it" }
         for (i in 2..999) {
-            val candidate = "$base ($i)$ext"
-            if (!exists(candidate)) return candidate
+            val candidate = File(directory, "$base ($i)$ext")
+            if (!candidate.exists()) return candidate
         }
         throw DilibException("Too many files in the library share this name.")
     }

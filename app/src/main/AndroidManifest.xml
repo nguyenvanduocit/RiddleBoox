@@ -6,6 +6,34 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!--
+        The writer's books live in shared storage as ordinary files
+        (/sdcard/Books/*.epub). All-files access is what opens them, and it is
+        not granted by a dialog: the user turns it on under Settings > Apps >
+        Special access > All files access, or it is set once over adb with
+        `appops set` (a double dash before `uid` cannot be written inside an
+        XML comment; see README).
+
+        Without it the diary still knows every book on the device, how far the
+        writer has read and everything they marked — all of that comes from the
+        reader's own database below, which needs no file access. Only reading
+        the words inside a book stops working.
+
+        READ_EXTERNAL_STORAGE and WRITE_EXTERNAL_STORAGE are declared alongside
+        it because on at least one Android 11 device the special access grant
+        alone was not enough: `Environment.isExternalStorageManager()`
+        reported true while every `java.io.File`/`ZipFile` open on a book
+        still threw a permission denial, until BOTH runtime permissions were
+        also granted — and even then only after the app's process restarted,
+        since the storage FUSE layer resolves an app's access group once, at
+        process start. [showOnboardingPermissionOverlay] and Settings' "check"
+        row ask for both alongside the all-files-access screen, and tell the
+        writer to close and reopen the diary once granted.
+    -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+    <!--
         NeoReader publishes its library — books, highlights, bookmarks — as an
         exported content provider under this authority, and asks for no
         permission to read it. Package visibility filtering still applies: an

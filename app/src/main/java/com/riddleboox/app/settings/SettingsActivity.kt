@@ -1,25 +1,28 @@
 package com.riddleboox.app.settings
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.riddleboox.app.BuildConfig
 import com.riddleboox.app.agent.AgentStore
 import com.riddleboox.app.backup.wholeDiaryBackup
 import com.riddleboox.app.history.ConversationStore
 import com.riddleboox.app.library.BookAccessCheck
+import com.riddleboox.app.library.allFilesAccess
 import com.riddleboox.app.library.canOpenBooks
 import com.riddleboox.app.library.checkBookAccess
-import com.riddleboox.app.library.persistStorageGrant
-import com.riddleboox.app.library.requestStorageAccessIntent
 import com.riddleboox.app.reply.fetchModelIds
 import com.riddleboox.app.reply.modelChoices
 import com.riddleboox.app.tools.readMemories
@@ -58,6 +61,9 @@ class SettingsActivity : Activity() {
     private lateinit var apiKeyField: EditText
     private lateinit var modelField: TextView
     private lateinit var libraryField: TextView
+
+    /** Whether [checkPermissions] has already asked for the legacy storage permissions this screen visit. */
+    private var askedForStoragePermissions = false
 
     /** The named server picked on the base-url row; null means "other", typed via [promptCustomBaseUrl]. */
     private var chosenProvider: Provider? = null
@@ -261,30 +267,46 @@ class SettingsActivity : Activity() {
     }
 
     private fun refreshPermissionsRow() {
-        val canOpen = canOpenBooks(this)
-        libraryField.text = if (canOpen) {
-            "can read the words inside your books"
-        } else {
-            "can only see titles, progress and notes — tap to grant the folder"
+        val canOpen = canOpenBooks()
+        val where = if (canOpen) null else allFilesAccess(this)
+        libraryField.text = when {
+            canOpen -> "can read the words inside your books"
+            where != null -> "can only see titles, progress and notes — tap to allow reading whole books"
+            else -> "this device has no switch for reading book files"
         }
-        libraryField.isClickable = !canOpen
-        libraryField.setOnClickListener(
-            if (canOpen) null else View.OnClickListener {
-                startActivityForResult(requestStorageAccessIntent(this), REQUEST_STORAGE_GRANT)
-            },
-        )
+        libraryField.isClickable = where != null
+        libraryField.setOnClickListener(where?.let { screen -> View.OnClickListener { startActivity(screen) } })
     }
 
     /**
      * The "permissions" section's own action, not tied to any one row under
-     * it: re-reads the grant (in case it changed since [onResume] last ran)
-     * and, when it's held, actually opens a book rather than trusting the
-     * grant alone — the same check the onboarding permission step runs, see
+     * it: re-reads the switch (in case it changed since [onResume] last ran)
+     * and, when it's on, actually opens a book rather than trusting the
+     * switch alone — the same check the onboarding permission step runs, see
      * [checkBookAccess].
+     *
+     * All-files access alone was found not to be enough on at least one
+     * Android 11 device: the switch reads as on, yet every book still throws
+     * a permission denial until READ_EXTERNAL_STORAGE and
+     * WRITE_EXTERNAL_STORAGE are both also granted — see
+     * `AndroidManifest.xml`'s note on the same permissions. [Unreadable] with
+     * a reader still missing either one asks for both here, on the spot,
+     * rather than leaving the writer stuck reading "opening a book failed"
+     * with nothing left on the page to tap.
      */
     private fun checkPermissions() {
         refreshPermissionsRow()
-        val message = when (val result = checkBookAccess(this, contentResolver)) {
+        val result = checkBookAccess(contentResolver)
+        // Asked at most once per tap: a permanently denied permission hands
+        // this callback an immediate, silent refusal with no dialog shown, so
+        // asking again on every retry would spin without the writer ever
+        // seeing why.
+        if (result is BookAccessCheck.Unreadable && !hasLegacyStoragePermissions() && !askedForStoragePermissions) {
+            askedForStoragePermissions = true
+            ActivityCompat.requestPermissions(this, LEGACY_STORAGE_PERMISSIONS, REQUEST_STORAGE_PERMISSIONS)
+            return
+        }
+        val message = when (result) {
             BookAccessCheck.PermissionMissing -> "not granted — tap the row above to allow it"
             BookAccessCheck.LibraryEmpty -> "granted, but there's no book on the shelf to try reading"
             BookAccessCheck.Readable -> "granted, and a book opened and read back fine"
@@ -294,22 +316,36 @@ class SettingsActivity : Activity() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
+    private fun hasLegacyStoragePermissions(): Boolean = LEGACY_STORAGE_PERMISSIONS.all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /**
+     * The FUSE layer that serves `/storage/emulated/0` resolves an app's
+     * access group once, at process start — granting these two permissions
+     * mid-session does not change what the already-running process can read,
+     * only what the next one can. There is nothing to re-check here, only
+     * something to tell the writer.
+     */
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_STORAGE_PERMISSIONS) return
+        val message = if (hasLegacyStoragePermissions()) {
+            "Granted — close the diary completely and reopen it for reading to start working."
+        } else {
+            "Reading whole books still needs that permission; without it only titles, progress and notes work."
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
     /**
      * Applies [PairActivity]'s result to this form the way a hand-typed edit
      * would land: nothing is saved here, "save" still does that. See
      * [pairingPayloadFrom] for why the actual extraction is a plain function
-     * rather than logic inline in this override. The folder-grant picker
-     * shares this same override, since both are ordinary `startActivityForResult`
-     * round trips — [REQUEST_STORAGE_GRANT] hands the granted Uri straight to
-     * [persistStorageGrant] and refreshes the row, [REQUEST_PAIR] fills the form.
+     * rather than logic inline in this override.
      */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_STORAGE_GRANT) {
-            data?.data?.let { persistStorageGrant(this, it) }
-            refreshPermissionsRow()
-            return
-        }
         if (requestCode != REQUEST_PAIR || resultCode != RESULT_OK || data == null) return
         val payload = pairingPayloadFrom(data) ?: return
         chosenProvider = providerFor(payload.baseUrl)
@@ -564,9 +600,10 @@ class SettingsActivity : Activity() {
         private const val EXTRA_DEFAULT_BASE_URL = "com.riddleboox.app.settings.DEFAULT_BASE_URL"
         private const val EXTRA_DEFAULT_API_KEY = "com.riddleboox.app.settings.DEFAULT_API_KEY"
         private const val EXTRA_DEFAULT_MODEL = "com.riddleboox.app.settings.DEFAULT_MODEL"
-        private const val REQUEST_STORAGE_GRANT = 1
+        private const val REQUEST_STORAGE_PERMISSIONS = 1
         private const val REQUEST_PAIR = 2
-
+        private val LEGACY_STORAGE_PERMISSIONS =
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
         /**
          * Opens the screen with the build-time values as its factory defaults:
          * what a field falls back to when it has never been saved, or when the

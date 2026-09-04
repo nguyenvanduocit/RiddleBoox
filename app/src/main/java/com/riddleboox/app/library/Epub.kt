@@ -2,7 +2,6 @@ package com.riddleboox.app.library
 
 import java.io.Closeable
 import java.io.File
-import java.io.InputStream
 import java.util.zip.ZipFile
 
 /** One document of a book, in the order it is meant to be read. */
@@ -43,7 +42,6 @@ class Epub private constructor(
     private val zip: ZipFile,
     private val entries: List<String>,
     val chapters: List<Chapter>,
-    private val tempFile: File? = null,
 ) : Closeable {
 
     /**
@@ -72,7 +70,6 @@ class Epub private constructor(
 
     override fun close() {
         runCatching { zip.close() }
-        tempFile?.delete()
     }
 
     companion object {
@@ -87,55 +84,29 @@ class Epub private constructor(
          */
         fun open(file: File): Epub? {
             val zip = runCatching { ZipFile(file) }.getOrNull() ?: return null
-            return fromZip(zip, tempFile = null)
-        }
-
-        /**
-         * Opens an EPUB read from [stream] by first copying it into [tempFile] —
-         * [ZipFile] needs random-access seeking a `content://` stream doesn't give,
-         * which is what a book read through the Storage Access Framework grant is.
-         * [tempFile] is deleted once the returned [Epub] is closed, or immediately
-         * on failure — the caller only needs to hand back a scratch location (its
-         * app cache directory is the natural one), not clean it up afterward.
-         */
-        fun open(stream: InputStream, tempFile: File): Epub? {
-            val copied = runCatching { tempFile.outputStream().use { stream.copyTo(it) } }.isSuccess
-            if (!copied) {
-                tempFile.delete()
-                return null
+            return runCatching {
+                val entries = zip.entries().asSequence().map { it.name }.toList()
+                val opf = opfPath(zip.text(entries, "META-INF/container.xml")) ?: error("no rootfile")
+                val base = opf.substringBeforeLast('/', "")
+                val pkg = zip.text(entries, opf)
+                val documents = spine(pkg).map { resolve(base, it) }
+                val titles = tableOfContents(zip, entries, pkg, base)
+                Epub(
+                    zip = zip,
+                    entries = entries,
+                    chapters = documents.mapIndexed { i, href ->
+                        Chapter(
+                            title = titles[href]
+                                ?: heading(zip.text(entries, href, HEADING_BYTES))
+                                ?: "Section ${i + 1}",
+                            href = href,
+                        )
+                    },
+                )
+            }.getOrElse {
+                zip.close()
+                null
             }
-            val zip = runCatching { ZipFile(tempFile) }.getOrNull()
-            if (zip == null) {
-                tempFile.delete()
-                return null
-            }
-            return fromZip(zip, tempFile)
-        }
-
-        private fun fromZip(zip: ZipFile, tempFile: File?): Epub? = runCatching {
-            val entries = zip.entries().asSequence().map { it.name }.toList()
-            val opf = opfPath(zip.text(entries, "META-INF/container.xml")) ?: error("no rootfile")
-            val base = opf.substringBeforeLast('/', "")
-            val pkg = zip.text(entries, opf)
-            val documents = spine(pkg).map { resolve(base, it) }
-            val titles = tableOfContents(zip, entries, pkg, base)
-            Epub(
-                zip = zip,
-                entries = entries,
-                chapters = documents.mapIndexed { i, href ->
-                    Chapter(
-                        title = titles[href]
-                            ?: heading(zip.text(entries, href, HEADING_BYTES))
-                            ?: "Section ${i + 1}",
-                        href = href,
-                    )
-                },
-                tempFile = tempFile,
-            )
-        }.getOrElse {
-            zip.close()
-            tempFile?.delete()
-            null
         }
     }
 }

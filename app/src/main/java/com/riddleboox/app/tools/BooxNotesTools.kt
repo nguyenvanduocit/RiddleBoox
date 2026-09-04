@@ -11,15 +11,12 @@ import ai.koog.prompt.message.MessagePart
 import ai.koog.prompt.streaming.StreamFrame
 import android.content.ContentResolver
 import android.content.ContentValues
-import android.content.Context
 import android.database.Cursor
 import android.net.Uri
+import android.os.Environment
 import ai.koog.agents.core.tools.ToolDescriptor
 import ai.koog.agents.core.tools.ToolParameterDescriptor
 import ai.koog.agents.core.tools.ToolParameterType
-import com.riddleboox.app.library.DocumentFileTree
-import com.riddleboox.app.library.FileTree
-import com.riddleboox.app.library.documentAt
 import com.riddleboox.app.reply.Toolbox
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,12 +26,15 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
+import java.io.FileInputStream
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.ZoneId
 import java.util.ArrayDeque
 import java.util.Locale
 import java.util.UUID
+import java.util.zip.ZipFile
 
 private const val LIST_NOTES = "list_boox_notes"
 private const val SEARCH_NOTES = "search_boox_notes"
@@ -70,7 +70,7 @@ data class BooxNotePage(
     val pageNumber: Int,
     val pageId: String?,
     val text: String,
-    val imageFile: FileTree?,
+    val imageFile: File?,
     val hasPrivatePageData: Boolean,
 )
 
@@ -108,15 +108,9 @@ fun interface BooxNotesVisionReader {
  */
 class OnyxBooxNotes(
     private val resolver: ContentResolver,
-    private val noteRoot: FileTree,
-    private val ksyncRoot: FileTree,
+    private val noteRoot: File = File(Environment.getExternalStorageDirectory(), "note"),
+    private val ksyncRoot: File = File(Environment.getExternalStorageDirectory(), ".ksync"),
 ) : BooxNotesSource {
-
-    constructor(context: Context, resolver: ContentResolver) : this(
-        resolver = resolver,
-        noteRoot = DocumentFileTree(documentAt(context, "note"), context),
-        ksyncRoot = DocumentFileTree(documentAt(context, ".ksync"), context),
-    )
 
     override fun listNotes(): List<BooxNote> {
         val found = LinkedHashMap<String, BooxNote>()
@@ -134,7 +128,7 @@ class OnyxBooxNotes(
         require(pageNumber > 0) { "page must be at least 1" }
         val selected = resolveNote(note)
         val pageId = selected.pageIds.getOrNull(pageNumber - 1)
-        val privateDocument = childPath(ksyncRoot, "document/${selected.id}")
+        val privateDocument = File(ksyncRoot, "document/${selected.id}")
         val exported = exportedFiles(selected)
         val image = exported.filter { it.isImageFile() }.getOrNull(pageNumber - 1)
         val shapeText = pageId?.let { readTypedShapeText(selected.id, it) }.orEmpty()
@@ -144,7 +138,7 @@ class OnyxBooxNotes(
             pageId = pageId,
             text = shapeText,
             imageFile = image,
-            hasPrivatePageData = privateDocument?.isDirectory == true,
+            hasPrivatePageData = privateDocument.isDirectory,
         )
     }
 
@@ -162,7 +156,7 @@ class OnyxBooxNotes(
         val exported = exportedFiles(selected)
         val rows = resolver.delete(NOTE_URI, "uniqueId = ?", arrayOf(selected.id))
         val files = exported.count { it.delete() } +
-            (childPath(ksyncRoot, "document/${selected.id}")?.let { clear(it) } ?: 0)
+            clear(File(ksyncRoot, "document/${selected.id}"))
         return DeletedNote(note = selected, entry = rows > 0, files = files)
     }
 
@@ -209,24 +203,13 @@ class OnyxBooxNotes(
     }
 
     /** Deletes a directory and everything under it, counting the files that went. */
-    private fun clear(directory: FileTree): Int {
+    private fun clear(directory: File): Int {
         if (!directory.isDirectory) return 0
         var files = 0
-        for (child in directory.listChildren()) {
-            if (child.isDirectory) files += clear(child) else if (child.delete()) files++
+        directory.walkBottomUp().forEach { entry ->
+            if (entry.isFile && entry.delete()) files++ else if (entry.isDirectory) entry.delete()
         }
-        directory.delete()
         return files
-    }
-
-    /** Walks [relativePath] ("a/b/c") from [root] one path segment at a time, or null if any segment is missing. */
-    private fun childPath(root: FileTree, relativePath: String): FileTree? {
-        var current = root
-        for (segment in relativePath.split('/')) {
-            if (segment.isBlank()) continue
-            current = current.listChildren().firstOrNull { it.name == segment } ?: return null
-        }
-        return current
     }
 
     private fun resolveNote(query: String): BooxNote {
@@ -248,19 +231,19 @@ class OnyxBooxNotes(
     // internal (not private) so BooxNotesToolsTest can characterize this BFS's
     // depth cutoff, dedup, and natural-sort behavior directly; OnyxBooxNotes has
     // no other seam that exercises it without a real BOOX ContentProvider.
-    internal fun exportedFiles(note: BooxNote): List<FileTree> {
+    internal fun exportedFiles(note: BooxNote): List<File> {
         if (!noteRoot.isDirectory) return emptyList()
         val titleWords = searchWords(note.title)
         if (titleWords.isBlank()) return emptyList()
-        val candidates = ArrayList<FileTree>()
-        val queue = ArrayDeque<Pair<FileTree, Int>>()
+        val candidates = ArrayList<File>()
+        val queue = ArrayDeque<Pair<File, Int>>()
         queue.add(noteRoot to 0)
         var visited = 0
         while (queue.isNotEmpty() && visited < MAX_EXPORTED_FILES) {
             val (directory, depth) = queue.removeFirst()
             visited = visitExportCandidates(directory, depth, titleWords, visited, queue, candidates)
         }
-        return candidates.sortedWith(compareBy<FileTree> { naturalKey(it.name) }.thenBy { it.path })
+        return candidates.sortedWith(compareBy<File> { naturalKey(it.name) }.thenBy { it.path })
     }
 
     /**
@@ -272,15 +255,15 @@ class OnyxBooxNotes(
      * the updated visited count.
      */
     private fun visitExportCandidates(
-        directory: FileTree,
+        directory: File,
         depth: Int,
         titleWords: String,
         visited: Int,
-        queue: ArrayDeque<Pair<FileTree, Int>>,
-        candidates: MutableList<FileTree>,
+        queue: ArrayDeque<Pair<File, Int>>,
+        candidates: MutableList<File>,
     ): Int {
         var count = visited
-        val children = directory.listChildren().sortedBy { it.name.lowercase(Locale.ROOT) }
+        val children = directory.listFiles()?.sortedBy { it.name.lowercase(Locale.ROOT) }.orEmpty()
         for (child in children) {
             if (++count >= MAX_EXPORTED_FILES) break
             when {
@@ -291,27 +274,30 @@ class OnyxBooxNotes(
         return count
     }
 
-    private fun matchesTitle(file: FileTree, titleWords: String): Boolean {
-        val relativeWords = searchWords(file.path)
+    private fun matchesTitle(file: File, titleWords: String): Boolean {
+        val relativeWords = searchWords(runCatching { file.relativeTo(noteRoot).path }.getOrDefault(file.name))
         return " $relativeWords ".contains(" $titleWords ")
     }
 
     private fun readTypedShapeText(noteId: String, pageId: String): String {
-        val shapeDirectory = childPath(ksyncRoot, "document/$noteId/shape") ?: return ""
-        val revisions = shapeDirectory.listChildren()
-            .filter { it.isFile && it.name.startsWith("$pageId#") && it.name.endsWith(".zip", true) }
-            .sortedBy { it.name }
+        val shapeDirectory = File(ksyncRoot, "document/$noteId/shape")
+        val revisions = shapeDirectory.listFiles()
+            ?.filter { it.isFile && it.name.startsWith("$pageId#") && it.extension.equals("zip", true) }
+            ?.sortedWith(compareBy<File> { it.lastModified() }.thenBy { it.name })
+            .orEmpty()
         val latest = revisions.lastOrNull() ?: return ""
         return runCatching { readShapeZip(latest) }.getOrDefault("")
     }
 
-    private fun readShapeZip(entry: FileTree): String {
-        val bytes = entry.openInputStream()?.use { it.readBounded(MAX_SHAPE_BYTES) } ?: return ""
+    private fun readShapeZip(zipFile: File): String {
         val values = ArrayList<String>()
-        java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
-            val first = generateSequence { zip.nextEntry }.firstOrNull { !it.isDirectory } ?: return ""
-            val content = zip.readBounded(MAX_SHAPE_BYTES) ?: return ""
-            values += ShapeProtoText.read(content)
+        ZipFile(zipFile).use { zip ->
+            val entry = zip.entries().asSequence().firstOrNull { !it.isDirectory } ?: return ""
+            if (entry.size > MAX_SHAPE_BYTES) return ""
+            zip.getInputStream(entry).use { input ->
+                val bytes = input.readBounded(MAX_SHAPE_BYTES) ?: return ""
+                values += ShapeProtoText.read(bytes)
+            }
         }
         return values.asSequence()
             .map { it.trim() }
@@ -351,11 +337,9 @@ class OnyxBooxNotes(
         }
     }.getOrDefault(emptyList())
 
-    private fun FileTree.isReadableExport(): Boolean = isImageFile() || extension().equals("pdf", true)
+    private fun File.isReadableExport(): Boolean = isImageFile() || extension.equals("pdf", true)
 
-    private fun FileTree.isImageFile(): Boolean = extension().lowercase(Locale.ROOT) in setOf("png", "jpg", "jpeg", "webp")
-
-    private fun FileTree.extension(): String = name.substringAfterLast('.', "")
+    private fun File.isImageFile(): Boolean = extension.lowercase(Locale.ROOT) in setOf("png", "jpg", "jpeg", "webp")
 
     private fun searchWords(value: String): String = buildString(value.length) {
         var pendingSpace = false
@@ -396,10 +380,10 @@ class BooxNotesTools(
 ) : Toolbox {
 
     constructor(
-        context: Context,
+        resolver: ContentResolver,
         visionReader: BooxNotesVisionReader? = null,
         openNote: suspend (BooxNote?) -> Boolean = { false },
-    ) : this(OnyxBooxNotes(context, context.contentResolver), visionReader, ZoneId.systemDefault(), openNote)
+    ) : this(OnyxBooxNotes(resolver), visionReader, ZoneId.systemDefault(), openNote)
 
     override val tools: List<ToolDescriptor> = listOf(
         ToolDescriptor(
@@ -620,9 +604,10 @@ class OpenAiBooxNotesVisionReader(
 ) : BooxNotesVisionReader {
 
     override suspend fun readPage(page: BooxNotePage): String {
-        val image = page.imageFile?.takeIf { it.isFile } ?: return ""
-        val bytes = image.openInputStream()?.use { it.readBounded(MAX_VISION_BYTES) } ?: return ""
-        val format = image.name.substringAfterLast('.', "").lowercase(Locale.ROOT).ifBlank { "png" }
+        val image = page.imageFile ?: return ""
+        if (!image.isFile || image.length() > MAX_VISION_BYTES) return ""
+        val bytes = FileInputStream(image).use { it.readBounded(MAX_VISION_BYTES) } ?: return ""
+        val format = image.extension.lowercase(Locale.ROOT).ifBlank { "png" }
         val request = prompt(
             id = "riddleboox-boox-note",
             params = OpenAIChatParams(maxTokens = 1200, reasoningEffort = reasoning),

@@ -2,7 +2,6 @@ package com.riddleboox.app.tools
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.riddleboox.app.library.JavaFileTree
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -201,7 +200,7 @@ class BooxNotesToolsTest {
             pageNumber = pageNumber,
             pageId = this.note.pageIds.getOrNull(pageNumber - 1),
             text = text,
-            imageFile = imageFile?.let { JavaFileTree(it) },
+            imageFile = imageFile,
             hasPrivatePageData = true,
         )
 
@@ -237,11 +236,7 @@ class OnyxBooxNotesExportedFilesTest {
 
     private fun onyxNotes(noteRoot: File): OnyxBooxNotes {
         val resolver = ApplicationProvider.getApplicationContext<Context>().contentResolver
-        return OnyxBooxNotes(
-            resolver,
-            noteRoot = JavaFileTree(noteRoot),
-            ksyncRoot = JavaFileTree(folder.newFolder()),
-        )
+        return OnyxBooxNotes(resolver, noteRoot = noteRoot, ksyncRoot = folder.newFolder())
     }
 
     private fun note(title: String) = BooxNote(
@@ -274,7 +269,7 @@ class OnyxBooxNotesExportedFilesTest {
 
         val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
 
-        assertEquals(listOf(match.relativeTo(root).path), result.map { it.path })
+        assertEquals(listOf(match), result)
     }
 
     @Test
@@ -296,7 +291,7 @@ class OnyxBooxNotesExportedFilesTest {
 
         val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
 
-        assertEquals(listOf(match.relativeTo(root).path), result.map { it.path })
+        assertEquals(listOf(match), result)
     }
 
     @Test
@@ -310,7 +305,7 @@ class OnyxBooxNotesExportedFilesTest {
 
         val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
 
-        assertEquals(listOf(shallow.relativeTo(root).path), result.map { it.path })
+        assertEquals(listOf(shallow), result)
     }
 
     @Test
@@ -321,7 +316,7 @@ class OnyxBooxNotesExportedFilesTest {
 
         val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
 
-        assertEquals(listOf(pdfMatch.relativeTo(root).path), result.map { it.path })
+        assertEquals(listOf(pdfMatch), result)
     }
 
     @Test
@@ -333,10 +328,7 @@ class OnyxBooxNotesExportedFilesTest {
 
         val result = onyxNotes(root).exportedFiles(note("Travel Journal"))
 
-        assertEquals(
-            listOf(page1, page2, page10).map { it.relativeTo(root).path },
-            result.map { it.path },
-        )
+        assertEquals(listOf(page1, page2, page10), result)
     }
 
     @Test
