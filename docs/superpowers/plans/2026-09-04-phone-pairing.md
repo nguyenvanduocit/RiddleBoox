@@ -962,6 +962,21 @@ git commit -m "feat(settings): PairActivity — the phone-pairing QR screen"
 
 ### Task 8: Wire "set up from phone" into `SettingsActivity`
 
+> **Deviation actually taken during implementation:** `SettingsActivity.onCreate()`
+> forces `SettingsStore`'s Keystore-backed `EncryptedSharedPreferences` open
+> immediately (`store.readOrDefault(...)`), and there is no `AndroidKeyStore`
+> provider under Robolectric — confirmed by actually running the test below and
+> hitting `KeyStoreException: AndroidKeyStore not found` inside
+> `MasterKey.Builder.build()`. No test in this repo has ever built a real
+> `SettingsActivity` through Robolectric for that reason. Instead of the
+> full-Activity test below, the result-Intent parsing was pulled out into a pure
+> `fun pairingPayloadFrom(data: Intent): PairingPayload?` in `PairActivity.kt`
+> (tested directly, no Activity involved — see `PairActivityResultTest.kt`), and
+> `onActivityResult` stayed a thin, untested shell — matching how every other
+> `onActivityResult` override in this codebase (`AgentsActivity`, `MainActivity`)
+> already has no dedicated test. The steps below are kept as originally written
+> for the historical record; do not follow them as-is.
+
 **Files:**
 - Modify: `app/src/main/java/com/riddleboox/app/settings/SettingsActivity.kt:150-155` (add the row), and add an `onActivityResult` override
 - Test: `app/src/test/java/com/riddleboox/app/settings/SettingsActivityPairingTest.kt`
