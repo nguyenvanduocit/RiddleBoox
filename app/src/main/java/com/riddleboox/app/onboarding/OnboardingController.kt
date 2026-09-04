@@ -39,8 +39,8 @@ class OnboardingController(
      * Segment index after which the sequence pauses instead of advancing on
      * its own — null means never. [onPermissionCheckpoint] fires once, and
      * the caller must call [proceedFromCheckpoint] to resume; this is how the
-     * writer's tap on the all-files-access overlay gets a place to happen
-     * without OnboardingController knowing anything about permissions itself.
+     * writer's tap on the folder-grant overlay gets a place to happen without
+     * OnboardingController knowing anything about permissions itself.
      */
     private val permissionCheckpointAfter: Int? = null,
     private val onPermissionCheckpoint: () -> Unit = {},

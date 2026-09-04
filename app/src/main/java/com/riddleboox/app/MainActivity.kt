@@ -529,8 +529,8 @@ class MainActivity : Activity() {
                 },
                 // Right after the diary explains it can read the writer's
                 // books (ONBOARDING_SEGMENTS[4]) is where asking for the
-                // all-files-access permission actually makes sense to the
-                // writer, instead of it appearing unexplained in Settings.
+                // storage folder grant actually makes sense to the writer,
+                // instead of it appearing unexplained in Settings.
                 permissionCheckpointAfter = if (asksForBooks) ONBOARDING_PERMISSION_CHECKPOINT else null,
                 onPermissionCheckpoint = { showOnboardingPermissionOverlay() },
                 onCaptionChanged = { progressLine.text = it },

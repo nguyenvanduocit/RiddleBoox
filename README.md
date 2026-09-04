@@ -216,11 +216,12 @@ Hai nguồn dữ liệu, hai điều kiện khác nhau:
   trong manifest, nếu không package visibility (API 30+) sẽ khiến `query()` trả về `null`
   — trông y hệt một máy không có cuốn sách nào.
 - **Chữ trong sách** đọc thẳng từ file `.epub` (`library/Epub.kt`: zip → `container.xml` →
-  OPF spine → NCX/nav → strip thẻ). Cái này cần quyền **all-files access**, vì từ Android 10
-  `READ_EXTERNAL_STORAGE` chỉ mở media và một file `.epub` không phải media. Bật nó ở dòng
-  **"sách trên máy"** trong màn hình cấu hình của app: dòng đó nói đang đọc được tới đâu, chạm
-  vào là mở thẳng công tắc của Android (`library/BookAccess.kt`). Chưa bật thì nhan đề, tiến độ
-  và ghi chú vẫn chạy đủ — chỉ chữ bên trong sách là chưa mở được.
+  OPF spine → NCX/nav → strip thẻ). Cái này cần một lần cấp quyền qua **Storage Access
+  Framework**: người viết chọn thư mục lưu trữ chính của máy một lần (lúc onboarding hoặc ở
+  dòng **"sách trên máy"** trong màn hình cấu hình), app giữ quyền đó lâu dài
+  (`library/StorageAccess.kt`, `library/BookAccess.kt`) mà không cần quyền toàn hệ thống
+  `MANAGE_EXTERNAL_STORAGE`. Chưa cấp thì nhan đề, tiến độ và ghi chú vẫn chạy đủ — chỉ chữ
+  bên trong sách là chưa mở được.
 
   **PDF không đọc được nội dung** — chỉ metadata và ghi chú; muốn đọc chữ trong PDF phải kéo
   thêm một thư viện trích text, hiện chưa làm.
