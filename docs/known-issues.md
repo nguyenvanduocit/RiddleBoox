@@ -325,7 +325,7 @@ run (613 tests) while a multi-agent copy-writing workflow was loading the
 machine. Isolated re-run: green. The change in flight touched only the
 `onboarding` package, `WelcomeOverlay`, and the intro block of `MainActivity`.
 
-## 9. The running head — "save" included — vanishes on Settings after typing: the keyboard goes full screen (High on the BOOX Go line; fixed on `fix/paper-window-insets`, device verification pending)
+## 9. The running head — "save" included — vanishes on Settings after typing: the keyboard goes full screen (High on the BOOX Go line; fixed on `fix/paper-window-insets`, verified on Note Air 2, Go verification pending)
 
 Reported 2026-09-04 on BOOX Go 7 / Go Color 7 / Go 10.3 (Android 13): after
 tapping the api key field, or a "type it in…" dialog, the top line
@@ -353,6 +353,12 @@ body instead of covering the field, `holdUnderSystemBars()` on every running
 head and on MainActivity's chrome row so a bar the firmware keeps pushes the
 line down instead of over it. Guarded by `ui/PaperInsetsTest`,
 `ui/KeyboardOnThePageTest`, `settings/SettingsWidgetsTest`.
+
+Verified 2026-09-04 on a Note Air 2 (Android 11, Onyx keyboard) with the fixed
+debug build via `scripts/install.sh`: the diary page's chrome row and the
+Settings head lay out at the same pixels as before (SAVE at `[1265,0][1356,56]`
+before, during and after the keyboard), the page stays visible with the
+keyboard up, and the app opens and writes normally. No regression.
 
 Still to verify on a Go device (the emulator can only stand in for stock
 Android): open Settings → tap api key → type → the head must stay, and the
