@@ -92,6 +92,10 @@
             android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
             android:exported="false" />
         <activity
+            android:name=".settings.PairActivity"
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
+            android:exported="false" />
+        <activity
             android:name=".MemoriesActivity"
             android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize"
             android:exported="false" />
