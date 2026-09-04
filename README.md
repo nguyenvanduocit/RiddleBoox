@@ -143,6 +143,9 @@ adb shell settings put global hidden_api_policy 1
 
 Setting này lưu ở `Settings.Global`, sống qua reboot (chỉ mất khi factory reset máy).
 
+`./scripts/install.sh` build bản debug rồi cài lên máy đang cắm (giữ nguyên dữ liệu), tự áp
+setting trên nếu máy chưa có, và mở app. Truyền đường dẫn APK để cài một bản có sẵn thay vì build.
+
 
 ## Nhật ký tra được gì
 
