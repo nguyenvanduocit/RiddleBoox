@@ -156,9 +156,11 @@ class SettingsActivity : Activity() {
                     "AI model",
                     "restore defaults" to { resetConnectionDefaults() },
                     "set up from phone" to { openPairing() },
+                    "check" to { checkAiModel() },
                 ),
             )
             addView(field("base url", baseUrlChooser))
+            addView(fieldHint("openai-compatible only — gemini and anthropic's native apis won't work"))
             addView(field("api key", apiKeyField))
             addView(field("model", modelField))
 
@@ -393,6 +395,40 @@ class SettingsActivity : Activity() {
         enumRows.forEach { it.save() }
         setResult(RESULT_OK)
         finish()
+    }
+
+    /**
+     * The "AI model" section's own action, same shape as "permissions"'
+     * [checkPermissions]: fires the same `GET /v1/models` probe [pickModel]
+     * uses to fill the model list, but for a base url with nothing to open a
+     * picker on — the base url and key on the form right now, not the saved
+     * ones, same reason [pickModel] reads the form. Unlike [pickModel], the
+     * failure itself is the useful answer here, so it is never swallowed
+     * into the offline shortlist: a mistyped or non-OpenAI-compatible base
+     * url — a native Gemini or Anthropic endpoint, see the hint under the
+     * base url field — surfaces its real HTTP status or connection error
+     * here, on the spot, instead of the generic excuse a first reply attempt
+     * would otherwise write on the page (see `Excuses.kt`).
+     */
+    private fun checkAiModel() {
+        val baseUrl = effectiveBaseUrl()
+        val apiKey = apiKeyField.text.toString().trim()
+        val waiting = AlertDialog.Builder(this)
+            .setMessage("checking the server…")
+            .setNegativeButton("cancel", null)
+            .show()
+        Thread {
+            val result = runCatching { fetchModelIds(baseUrl, apiKey) }
+            runOnUiThread {
+                if (isFinishing || isDestroyed || !waiting.isShowing) return@runOnUiThread
+                waiting.dismiss()
+                val message = result.fold(
+                    onSuccess = { ids -> "looks good — found ${ids.size} model" + (if (ids.size == 1) "" else "s") },
+                    onFailure = { e -> e.message ?: e.javaClass.simpleName },
+                )
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            }
+        }.apply { isDaemon = true; start() }
     }
 
     /**

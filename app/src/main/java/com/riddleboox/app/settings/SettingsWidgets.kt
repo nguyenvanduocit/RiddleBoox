@@ -97,6 +97,20 @@ internal fun Activity.sectionHeader(title: String, vararg actions: Pair<String, 
         }
     }
 
+/**
+ * A short, de-emphasised note under a field — the one departure from every
+ * other row's pure-black e-ink-safe text (see [caption]'s own anti-fade
+ * rationale in `Paper.kt`): this is explanatory, not something a writer
+ * proofreads for a mistyped character, so a smaller, greyed caption reads as
+ * an aside rather than a fourth field. Same DKGRAY treatment already used
+ * for the agent editor's tool-picker note in `AgentsActivity.kt`.
+ */
+internal fun Activity.fieldHint(text: String): TextView = caption(text).apply {
+    textSize = 13f
+    setTextColor(Color.DKGRAY)
+    setPadding(0, dp(4), 0, dp(2))
+}
+
 /** Reads like the fields around it, but opens a list instead of a keyboard. */
 internal fun Activity.chooserField(value: String, onTap: () -> Unit): TextView = TextView(this).apply {
     text = value
