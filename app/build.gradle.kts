@@ -41,8 +41,8 @@ android {
         minSdk = 29
         // Google Play yêu cầu targetSdk 36 cho bản phát hành mới từ 31/8/2026.
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.4.7"
+        versionCode = 12
+        versionName = "0.4.8"
 
         buildConfigField("String", "LLM_API_KEY", "\"${localProperties.getProperty("llm.apiKey", "")}\"")
         buildConfigField("String", "LLM_BASE_URL", "\"${localProperties.getProperty("llm.baseUrl", "https://openrouter.ai/api")}\"")
@@ -64,7 +64,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             // Public builds must never embed the developer's key from local.properties;
             // users bring their own key via Settings (SettingsStore falls back to this default).
             buildConfigField("String", "LLM_API_KEY", "\"\"")
