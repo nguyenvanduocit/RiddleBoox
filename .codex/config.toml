@@ -4,5 +4,17 @@ args = ["mcp"]
 cwd = "/Users/firegroup/projects/RiddleBoox"
 startup_timeout_sec = 20
 
+[mcp_servers.repowise.tools.get_health]
+approval_mode = "approve"
+
+[mcp_servers.repowise.tools.get_dead_code]
+approval_mode = "approve"
+
+[mcp_servers.repowise.tools.get_architecture]
+approval_mode = "approve"
+
+[mcp_servers.repowise.tools.get_answer]
+approval_mode = "approve"
+
 [features]
 hooks = true
